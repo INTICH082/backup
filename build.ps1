@@ -1,22 +1,43 @@
-Write-Host "=== Сборка модуля авторизации (SQLite версия) ==="
+# Сборка модуля авторизации
+Write-Host "Сборка модуля авторизации..." -ForegroundColor Green
 
-$gcc = "C:\msys64\ucrt64\bin\g++.exe"
-$project = "C:\Users\KSK-SHOP\projects\group_project\group_project"
+# Компиляция с нужными флагами
+$sources = @(
+    "auth.cpp",
+    "server.cpp", 
+    "database.cpp",
+    "main.cpp"
+)
 
-mkdir -Force build
-cd build
+# Флаги для MinGW
+$cflags = "-I. -I./include -std=c++17 -O2 -Wall"
 
-# Компиляция с SQLite (предполагаем, что SQLite установлен в MSYS2)
-& $gcc -c "$project\authorization\database.cpp" -I"$project\authorization" -std=c++11
-& $gcc -c "$project\authorization\auth.cpp" -I"$project\authorization" -std=c++11
-& $gcc -c "$project\authorization\server.cpp" -I"$project\authorization" -std=c++11
-& $gcc -c "$project\authorization\main.cpp" -I"$project\authorization" -std=c++11
+# Ссылки на библиотеки (для MinGW)
+$libs = "-lcurl -lssl -lcrypto"
 
-# Линковка с SQLite и CURL
-& $gcc database.o auth.o server.o main.o -o auth_module.exe -lcurl -lsqlite3 -lws2_32
+# Компиляция каждого файла
+foreach ($src in $sources) {
+    $obj = [System.IO.Path]::ChangeExtension($src, ".o")
+    Write-Host "Компиляция $src -> $obj"
+    g++ $cflags -c $src -o $obj
+    
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "❌ Ошибка компиляции $src" -ForegroundColor Red
+        exit 1
+    }
+}
 
-Write-Host "`n✅ Сборка завершена!"
-Write-Host "Запуск: .\auth_module.exe"
-Write-Host "БД будет создана в файле auth.db"
+# Сборка исполняемого файла
+Write-Host "Сборка исполняемого файла..." -ForegroundColor Green
+g++ *.o -o auth_module $libs -lws2_32
 
-cd ..
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "❌ Ошибка сборки" -ForegroundColor Red
+    exit 1
+}
+
+# Очистка промежуточных файлов
+Remove-Item *.o -ErrorAction SilentlyContinue
+
+Write-Host "✅ Сборка завершена!" -ForegroundColor Green
+Write-Host "Запуск: .\auth_module" -ForegroundColor Yellow

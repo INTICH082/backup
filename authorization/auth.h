@@ -1,12 +1,14 @@
 #pragma once
 #include <string>
 #include <map>
+#include <ctime>  // ДОБАВИТЬ
 
 using namespace std;
 
 class TokenManager {
 private:
-    static map<string, int> loginTokens;
+    // Изменен тип: теперь храним и timestamp
+    static map<string, pair<int, time_t>> loginTokens;  
 public:
     static string createLoginToken(int user_id);
     static int validateLoginToken(const string& token);

@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <cstdlib>
+#include <stdexcept>  // ДОБАВИТЬ
 
 using namespace std;
 
@@ -21,15 +22,28 @@ namespace Config {
         }
     }
 
-    // GitHub OAuth
-    const string GITHUB_CLIENT_ID = getEnv("GITHUB_CLIENT_ID", "Ov23lisJdUcb1DmKhIfe");
-    const string GITHUB_CLIENT_SECRET = getEnv("GITHUB_CLIENT_SECRET", "897dbebdde0fcb173d22f45f53de423bb7bb44ac");
+    // GitHub OAuth - НИКОГДА не хардкодить в коде!
+    // Используем .env файл
+    const string GITHUB_CLIENT_ID = getEnv("GITHUB_CLIENT_ID");
+    const string GITHUB_CLIENT_SECRET = getEnv("GITHUB_CLIENT_SECRET");
     
     // Порт сервера
     const int PORT = getEnvInt("PORT", 8081);
     
-    // JWT секрет
-    const string JWT_SECRET = getEnv("JWT_SECRET", "iplaygodotandclaimfun");
+    // JWT секрет - ДОЛЖЕН быть в .env!
+    const string JWT_SECRET = getEnv("JWT_SECRET", "change_this_in_production");
+    
+    // Проверка конфигурации
+    inline void validateConfig() {
+        if (JWT_SECRET == "change_this_in_production") {
+            cerr << "⚠️  ВНИМАНИЕ: Используется дефолтный JWT_SECRET!" << endl;
+            cerr << "   Установите переменную окружения JWT_SECRET" << endl;
+        }
+        
+        if (GITHUB_CLIENT_ID.empty() || GITHUB_CLIENT_SECRET.empty()) {
+            cerr << "⚠️  ВНИМАНИЕ: GitHub OAuth не настроен" << endl;
+        }
+    }
     
     // Токены
     const int ACCESS_TOKEN_EXPIRE_SEC = 900;       // 15 минут
