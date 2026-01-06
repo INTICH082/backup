@@ -1,7 +1,7 @@
 Write-Host "=== Сборка модуля авторизации ==="
 
 $gcc = "C:\msys64\ucrt64\bin\g++.exe"
-$project = "C:\Users\KSK-SHOP\projects\group_project\group_project"
+$project = "C:\Users\KSK-SHOP\projects\backup"
 $mysql_inc = "$project\mysql-connector\include"
 $mysql_lib = "$project\mysql-connector\lib"
 
