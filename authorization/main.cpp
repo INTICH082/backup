@@ -8,17 +8,12 @@ using namespace std;
 int main() {
     cout << "Запуск модуля авторизации..." << endl;
     
-    // Валидация конфигурации
-    Config::validateConfig();
-    
     if (!Auth::init()) {
-        cerr << "❌ Ошибка инициализации" << endl;
+        cerr << "Ошибка инициализации" << endl;
         return 1;
     }
     
     cout << "✅ Модуль готов к работе" << endl;
-    cout << "📡 Порт: " << Config::PORT << endl;
-    
     HttpServer::start(Config::PORT);
     Auth::cleanup();
     

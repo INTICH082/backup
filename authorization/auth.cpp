@@ -7,9 +7,6 @@
 #include <iostream>
 #include <algorithm>
 #include <cstdlib>
-#include <openssl/sha.h>  // ДОБАВИТЬ
-#include <iomanip>        // ДОБАВИТЬ
-#include <vector>         // ДОБАВИТЬ
 
 using namespace std;
 
@@ -29,31 +26,12 @@ void Auth::cleanup() {
     curl_global_cleanup();
 }
 
-// ИСПРАВЛЕННАЯ ФУНКЦИЯ - ЗАМЕНИТЬ
 string Auth::hashPassword(const string& password) {
-    // Простое SHA256 с солью (лучше чем DJB2)
-    string salted = password + Config::JWT_SECRET + "static_salt_for_student_project";
-    unsigned char hash[SHA256_DIGEST_LENGTH];
-    
-    // Если OpenSSL не установлен, используем fallback
-    #ifdef OPENSSL_VERSION_NUMBER
-    SHA256_CTX sha256;
-    SHA256_Init(&sha256);
-    SHA256_Update(&sha256, salted.c_str(), salted.length());
-    SHA256_Final(hash, &sha256);
-    #else
-    // Fallback: XOR хэш (все равно лучше DJB2)
-    for (size_t i = 0; i < salted.length(); i++) {
-        hash[i % SHA256_DIGEST_LENGTH] ^= salted[i] ^ (i * 31);
+    unsigned long hash = 5381;
+    for (char c : password + Config::JWT_SECRET) {
+        hash = ((hash << 5) + hash) + c;
     }
-    #endif
-    
-    // Конвертируем в hex строку
-    stringstream ss;
-    for(int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
-        ss << hex << setw(2) << setfill('0') << (int)hash[i];
-    }
-    return ss.str();
+    return to_string(hash);
 }
 
 bool Auth::verifyPassword(const string& password, const string& hash) {
@@ -63,42 +41,33 @@ bool Auth::verifyPassword(const string& password, const string& hash) {
 string Auth::registerUser(const string& login, const string& password,
                          const string& fullname, const string& email) {
     if (login.empty() || password.empty() || fullname.empty() || email.empty()) {
-        return "{\"success\":false,\"error\":\"Все поля обязательны\"}";
-    }
-    
-    // Простая валидация email
-    if (email.find('@') == string::npos) {
-        return "{\"success\":false,\"error\":\"Неверный email\"}";
+        return "{\"error\":\"Все поля обязательны\"}";
     }
     
     if (Database::getUserByLogin(login) != 0) {
-        return "{\"success\":false,\"error\":\"Логин уже существует\"}";
+        return "{\"error\":\"Логин уже существует\"}";
     }
     
     string password_hash = hashPassword(password);
     int user_id = Database::createUserWithPassword(login, password_hash, fullname, email);
     
-    if (user_id == 0) return "{\"success\":false,\"error\":\"Ошибка БД\"}";
-    
-    string tokens = generateTokenPair(user_id);
-    return "{\"success\":true,\"data\":" + tokens + "}";
+    if (user_id == 0) return "{\"error\":\"Ошибка БД\"}";
+    return generateTokenPair(user_id);
 }
 
 string Auth::loginUser(const string& login, const string& password) {
     if (login.empty() || password.empty()) {
-        return "{\"success\":false,\"error\":\"Логин и пароль обязательны\"}";
+        return "{\"error\":\"Логин и пароль обязательны\"}";
     }
     
     auto user_data = Database::getUserWithPasswordHash(login);
     if (user_data.first == 0 || !verifyPassword(password, user_data.second)) {
-        return "{\"success\":false,\"error\":\"Неверный логин или пароль\"}";
+        return "{\"error\":\"Неверный логин или пароль\"}";
     }
     
-    string tokens = generateTokenPair(user_data.first);
-    return "{\"success\":true,\"data\":" + tokens + "}";
+    return generateTokenPair(user_data.first);
 }
 
-// ОСТАВШАЯСЯ ЧАСТЬ БЕЗ ИЗМЕНЕНИЙ...
 string Auth::getGitHubToken(const string& code) {
     CURL* curl = curl_easy_init();
     string response;
@@ -149,52 +118,19 @@ string Auth::getGitHubUser(const string& token) {
     return response;
 }
 
-// ИСПРАВЛЕННЫЙ ПАРСЕР JSON - ЗАМЕНИТЬ
 string Auth::parseJson(const string& json, const string& key) {
-    // Ищем ключ в кавычках
-    string search_key = "\"" + key + "\":";
-    size_t pos = json.find(search_key);
-    
+    size_t pos = json.find("\"" + key + "\":");
     if (pos == string::npos) return "";
     
-    // Пропускаем ключ
-    size_t value_start = pos + search_key.length();
+    size_t start = json.find("\"", pos + key.length() + 3);
+    if (start == string::npos) return "";
     
-    // Пропускаем пробелы
-    while (value_start < json.length() && isspace(json[value_start])) {
-        value_start++;
-    }
+    size_t end = json.find("\"", start + 1);
+    if (end == string::npos) return "";
     
-    if (value_start >= json.length()) return "";
-    
-    // Если значение в кавычках
-    if (json[value_start] == '"') {
-        size_t start = value_start + 1;
-        size_t end = json.find('"', start);
-        if (end == string::npos) return "";
-        
-        // Проверяем, не экранированная ли кавычка
-        while (end > 0 && json[end-1] == '\\') {
-            end = json.find('"', end + 1);
-            if (end == string::npos) return "";
-        }
-        
-        return json.substr(start, end - start);
-    }
-    // Если число или другое значение
-    else {
-        size_t end = value_start;
-        while (end < json.length() && 
-               json[end] != ',' && 
-               json[end] != '}' && 
-               !isspace(json[end])) {
-            end++;
-        }
-        return json.substr(value_start, end - value_start);
-    }
+    return json.substr(start + 1, end - start - 1);
 }
 
-// ОСТАВШАЯСЯ ЧАСТЬ БЕЗ ИЗМЕНЕНИЙ...
 string Auth::createToken(const string& data, int expire_seconds) {
     time_t now = time(nullptr);
     string full_data = data + "|" + to_string(now);
@@ -220,14 +156,6 @@ bool Auth::parseToken(const string& token, int& user_id, string& type, time_t& c
     type = token.substr(pos1 + 1, pos2 - pos1 - 1);
     string time_str = token.substr(pos2 + 1, pos3 - pos2 - 1);
     string hash_str = token.substr(pos3 + 1);
-    
-    // Проверка что это числа
-    try {
-        stoi(id_str);
-        stoll(time_str);
-    } catch(...) {
-        return false;
-    }
     
     string check_data = id_str + "|" + type + "|" + time_str;
     unsigned long check_hash = 5381;
@@ -262,26 +190,19 @@ string Auth::verifyToken(const string& token) {
     time_t created_at = 0;
     
     if (!parseToken(token, user_id, type, created_at) || type != "access") {
-        return "{\"success\":false,\"valid\":false}";
+        return "{\"valid\":false}";
     }
     
     if (time(nullptr) - created_at > Config::ACCESS_TOKEN_EXPIRE_SEC) {
-        return "{\"success\":false,\"valid\":false}";
+        return "{\"valid\":false}";
     }
     
-    return "{\"success\":true,\"valid\":true,\"user_id\":" + to_string(user_id) + "}";
+    return "{\"valid\":true,\"user_id\":" + to_string(user_id) + "}";
 }
 
 string Auth::telegramAuth(const string& telegram_id_str, const string& name) {
     if (telegram_id_str.empty() || name.empty()) {
-        return "{\"success\":false,\"error\":\"Требуется telegram_id и имя\"}";
-    }
-    
-    // Проверка что telegram_id - число
-    for (char c : telegram_id_str) {
-        if (!isdigit(c)) {
-            return "{\"success\":false,\"error\":\"telegram_id должен быть числом\"}";
-        }
+        return "{\"error\":\"Требуется telegram_id и имя\"}";
     }
     
     long long telegram_id = stoll(telegram_id_str);
@@ -293,21 +214,19 @@ string Auth::telegramAuth(const string& telegram_id_str, const string& name) {
         user_id = Database::createTelegramUser(login, name, email, telegram_id);
     }
     
-    if (user_id == 0) return "{\"success\":false,\"error\":\"Ошибка БД\"}";
-    
-    string tokens = generateTokenPair(user_id);
-    return "{\"success\":true,\"data\":" + tokens + "}";
+    if (user_id == 0) return "{\"error\":\"Ошибка БД\"}";
+    return generateTokenPair(user_id);
 }
 
 string Auth::startOAuth(const string& login_token) {
     if (login_token.empty()) {
-        return "{\"success\":false,\"error\":\"Требуется login_token\"}";
+        return "{\"error\":\"Требуется login_token\"}";
     }
     
     // Проверяем токен и получаем user_id
     int user_id = TokenManager::validateLoginToken(login_token);
     if (user_id == 0) {
-        return "{\"success\":false,\"error\":\"Неверный или устаревший login_token\"}";
+        return "{\"error\":\"Неверный login_token\"}";
     }
     
     // Создаем state токен для этого пользователя
@@ -317,19 +236,15 @@ string Auth::startOAuth(const string& login_token) {
                 "&redirect_uri=http://localhost:" + to_string(Config::PORT) + "/auth/callback" +
                 "&state=" + state_token + "&scope=user";
     
-    return "{\"success\":true,\"auth_url\":\"" + url + "\", \"state_token\":\"" + state_token + "\"}";
+    return "{\"auth_url\":\"" + url + "\", \"state_token\":\"" + state_token + "\"}";
 }
 
 string Auth::handleGitHubCallback(const string& code, const string& state) {
-    if (code.empty()) {
-        return "{\"success\":false,\"error\":\"Требуется код авторизации\"}";
-    }
-    
     int user_id = TokenManager::validateLoginToken(state);
-    if (user_id == 0) return "{\"success\":false,\"error\":\"Неверный или устаревший токен\"}";
+    if (user_id == 0) return "{\"error\":\"Неверный или устаревший токен\"}";
     
     string gh_token = getGitHubToken(code);
-    if (gh_token.empty()) return "{\"success\":false,\"error\":\"Ошибка GitHub авторизации\"}";
+    if (gh_token.empty()) return "{\"error\":\"Ошибка GitHub авторизации\"}";
     
     string user_info = getGitHubUser(gh_token);
     string github_id = parseJson(user_info, "id");
@@ -337,46 +252,39 @@ string Auth::handleGitHubCallback(const string& code, const string& state) {
     string name = parseJson(user_info, "name");
     string email = parseJson(user_info, "email");
     
-    if (github_id.empty()) return "{\"success\":false,\"error\":\"Неверные данные от GitHub\"}";
+    if (github_id.empty()) return "{\"error\":\"Неверные данные от GitHub\"}";
     if (name.empty()) name = login;
     if (email.empty()) email = login + "@github.user";
     
     int existing_id = Database::getUserByGithubId(github_id);
     if (existing_id == 0) {
         existing_id = Database::createGitHubUser(login, name, email, github_id);
-        if (existing_id == 0) return "{\"success\":false,\"error\":\"Ошибка создания пользователя\"}";
+        if (existing_id == 0) return "{\"error\":\"Ошибка создания пользователя\"}";
         user_id = existing_id;
     } else {
         user_id = existing_id;
     }
     
-    string tokens = generateTokenPair(user_id);
-    return "{\"success\":true,\"data\":" + tokens + "}";
+    return generateTokenPair(user_id);
 }
 
 string Auth::refreshToken(const string& refresh_token) {
-    if (refresh_token.empty()) {
-        return "{\"success\":false,\"error\":\"Требуется refresh_token\"}";
-    }
-    
     int user_id = 0;
     string type;
     time_t created_at = 0;
     
     if (!parseToken(refresh_token, user_id, type, created_at) || type != "refresh") {
-        return "{\"success\":false,\"error\":\"Неверный refresh токен\"}";
+        return "{\"error\":\"Неверный refresh токен\"}";
     }
     
     if (time(nullptr) - created_at > Config::REFRESH_TOKEN_EXPIRE_SEC) {
-        return "{\"success\":false,\"error\":\"Refresh токен устарел\"}";
+        return "{\"error\":\"Refresh токен устарел\"}";
     }
     
-    string tokens = generateTokenPair(user_id);
-    return "{\"success\":true,\"data\":" + tokens + "}";
+    return generateTokenPair(user_id);
 }
 
-// ИСПРАВЛЕННЫЙ TokenManager - ЗАМЕНИТЬ
-map<string, pair<int, time_t>> TokenManager::loginTokens;  // Изменен тип
+map<string, int> TokenManager::loginTokens;
 
 string TokenManager::createLoginToken(int user_id) {
     cleanupExpiredTokens();
@@ -386,50 +294,27 @@ string TokenManager::createLoginToken(int user_id) {
                       to_string(rand() % 1000000) + "_" + 
                       to_string(time(nullptr));
     
-    // Более надежный хэш
     unsigned long hash = 5381;
-    for (char c : token_str + Config::JWT_SECRET) {
-        hash = ((hash << 5) + hash) + c;
-    }
+    for (char c : token_str) hash = ((hash << 5) + hash) + c;
+    token_str = to_string(hash);
     
-    // Используем hex представление
-    stringstream ss;
-    ss << hex << hash;
-    token_str = ss.str();
-    
-    loginTokens[token_str] = {user_id, time(nullptr)};
+    loginTokens[token_str] = user_id;
     return token_str;
 }
 
 int TokenManager::validateLoginToken(const string& token) {
     auto it = loginTokens.find(token);
     if (it != loginTokens.end()) {
-        int user_id = it->second.first;
-        time_t created = it->second.second;
-        
-        // Токен живет 5 минут
-        if (time(nullptr) - created <= 300) {
-            loginTokens.erase(it);
-            return user_id;
-        } else {
-            loginTokens.erase(it);
-            return 0;
-        }
+        int user_id = it->second;
+        loginTokens.erase(it);
+        return user_id;
     }
     return 0;
 }
 
 void TokenManager::cleanupExpiredTokens() {
-    time_t now = time(nullptr);
-    vector<string> to_remove;
-    
-    for (const auto& [token, data] : loginTokens) {
-        if (now - data.second > 300) { // 5 минут
-            to_remove.push_back(token);
-        }
-    }
-    
-    for (const auto& token : to_remove) {
-        loginTokens.erase(token);
+    static int counter = 0;
+    if (++counter % 10 == 0) {
+        loginTokens.clear();
     }
 }
