@@ -126,6 +126,7 @@ User SimpleDB::createOrUpdateUser(const string& github_id,
     return User{};
 }
 
+// Метод уже должен быть в вашем файле:
 User SimpleDB::createUserWithPassword(const string& username,
                                      const string& email,
                                      const string& full_name,

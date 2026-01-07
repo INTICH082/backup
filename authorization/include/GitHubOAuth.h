@@ -31,6 +31,8 @@ public:
     string getAuthorizationUrl() const;
     string getAccessToken(const string& code);
     GitHubUser getUserInfo(const string& access_token);
+    string getAuthorizationUrlWithToken(const string& login_token) const;
+    void setRedirectUri(const string& new_uri);
 };
 
 #endif

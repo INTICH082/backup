@@ -99,6 +99,18 @@ string GitHubOAuth::getAccessToken(const string& code) {
     return "";
 }
 
+string GitHubOAuth::getAuthorizationUrlWithToken(const string& login_token) const {
+    return "https://github.com/login/oauth/authorize?client_id=" + client_id +
+           "&redirect_uri=" + redirect_uri +
+           "&scope=user:email" +
+           "&state=token_" + login_token; // Добавляем login_token в state
+}
+
+void GitHubOAuth::setRedirectUri(const string& new_uri) {
+    redirect_uri = new_uri;
+    cout << "[GitHubOAuth] Updated redirect URI to: " << redirect_uri << endl;
+}
+
 GitHubUser GitHubOAuth::getUserInfo(const string& access_token) {
     string user_url = "https://api.github.com/user";
     

@@ -56,12 +56,16 @@ echo 6. XTunnelSimple.cpp...
 g++ -c src/XTunnelSimple.cpp -o build/XTunnelSimple.o -Iinclude %COMPILE_FLAGS%
 if %errorlevel% neq 0 goto :error
 
+echo 7. AutoSessionManager.cpp...
+g++ -c src/AutoSessionManager.cpp -o build/AutoSessionManager.o -Iinclude -std=c++17
+if %errorlevel% neq 0 goto :error
+
 echo.
 echo ✅ All files compiled successfully!
 echo.
 
 echo 🔗 Linking executable...
-g++ build/main.o build/Config.o build/GitHubOAuth.o build/JWT.o build/SimpleDB.o build/XTunnelSimple.o -o build/auth_module.exe -lcurl -lssl -lcrypto -lws2_32 -std=c++17
+g++ build/main.o build/Config.o build/GitHubOAuth.o build/JWT.o build/SimpleDB.o build/XTunnelSimple.o build/AutoSessionManager.o -o build/auth_module.exe -lcurl -lssl -lcrypto -lws2_32 -std=c++17
 
 if %errorlevel% equ 0 (
     echo.

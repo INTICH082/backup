@@ -3,7 +3,8 @@
 #include "../include/GitHubOAuth.h"
 #include "../include/JWT.h"
 #include "../include/SimpleDB.h"
-#include "../include/XTunnelSimple.h"  
+#include "../include/XTunnelSimple.h"
+#include "../include/AutoSessionManager.h"
 
 #include <iostream>
 #include <sstream>
@@ -75,7 +76,10 @@ private:
             istringstream line_stream(request_line);
             line_stream >> method >> path >> version;
             
-            // Remove query string from path
+            // Store full path for query parsing
+            string full_path = path;
+            
+            // Remove query string from path for routing
             size_t qmark = path.find('?');
             if (qmark != string::npos) path = path.substr(0, qmark);
             
@@ -87,6 +91,7 @@ private:
             }
             
             auto headers = parse_headers(headers_text);
+            headers["Request-Path"] = full_path; // Store full path with query
             
             // Get body
             string body;
@@ -221,37 +226,503 @@ string extract_token(const map<string, string>& headers) {
     return "";
 }
 
-void runFullAPIServer(int port, JWT& jwt, SimpleDB& db) {
+// Функция извлечения query параметров
+string get_query_param(const map<string, string>& headers, const string& param) {
+    auto it = headers.find("Request-Path");
+    if (it == headers.end()) return "";
+    
+    const string& full_path = it->second;
+    size_t start = full_path.find(param + "=");
+    if (start == string::npos) return "";
+    
+    start += param.length() + 1;
+    size_t end = full_path.find("&", start);
+    if (end == string::npos) end = full_path.length();
+    
+    return full_path.substr(start, end - start);
+}
+
+// Простая функция хеширования пароля (в продакшене используйте bcrypt/scrypt)
+string hash_password(const string& password) {
+    // Простой хеш для демонстрации. ЗАМЕНИТЕ на настоящий хеш в продакшене!
+    hash<string> hasher;
+    return to_string(hasher(password + "salt_123"));
+}
+
+// ========== НОВЫЙ API СЕРВЕР ==========
+
+void runFullAPIServer(int port, JWT& jwt, SimpleDB& db, GitHubOAuth& github) {
     SimpleHTTPServer server(port);
     
-    // ========== PUBLIC ENDPOINTS ==========
+    // Создаем менеджер сессий для login_token
+    AuthSessionManager sessionManager;
     
-    // Health check
+    // ========== ВСЕ ЭНДПОИНТЫ ==========
+    
+    // 1. Health check
     server.route("GET", "/health", [](const string& body, const map<string, string>& headers) {
         return json{{"status", "ok"}, {"service", "auth"}, {"timestamp", time(nullptr)}}.dump();
     });
     
-    // Login
-    server.route("POST", "/api/auth/login", [&](const string& body, const map<string, string>& headers) {
+    // 2. Discovery endpoint
+    server.route("GET", "/api/discovery", [](const string& body, const map<string, string>& headers) {
+        return json{
+            {"service", "auth_module"},
+            {"version", "2.1-full-registration"},
+            {"timestamp", time(nullptr)},
+            {"endpoints", {
+                {{"method", "GET"}, {"path", "/health"}, {"description", "Health check"}},
+                {{"method", "POST"}, {"path", "/api/auth/init"}, {"description", "Initialize auth session (GitHub)"}},
+                {{"method", "GET"}, {"path", "/api/auth/status"}, {"description", "Check auth status"}},
+                {{"method", "GET"}, {"path", "/api/auth/callback"}, {"description", "GitHub OAuth callback"}},
+                {{"method", "POST"}, {"path", "/api/auth/validate"}, {"description", "Validate JWT token"}},
+                {{"method", "POST"}, {"path", "/api/auth/refresh"}, {"description", "Refresh JWT token"}},
+                {{"method", "POST"}, {"path", "/api/auth/logout"}, {"description", "Logout (revoke refresh token)"}},
+                {{"method", "POST"}, {"path", "/api/users/register"}, {"description", "Register new user (password)"}},
+                {{"method", "POST"}, {"path", "/api/users/login"}, {"description", "Login with password"}},
+                {{"method", "GET"}, {"path", "/api/users/list"}, {"description", "List all users (admin only)"}}
+            }}
+        }.dump();
+    });
+    
+    // 3. Инициализация авторизации через GitHub
+    server.route("POST", "/api/auth/init", [&](const string& body, const map<string, string>& headers) {
+        try {
+            // Создаем новую сессию с login_token
+            string login_token = sessionManager.createSession();
+            
+            // Генерируем URL для GitHub OAuth с login_token в state
+            string auth_url = github.getAuthorizationUrlWithToken(login_token);
+            
+            json response = {
+                {"success", true},
+                {"token", login_token},
+                {"auth_url", auth_url},
+                {"expires_in", 300}, // 5 минут
+                {"timestamp", time(nullptr)}
+            };
+            
+            cout << "[Auth] Created GitHub login_token: " << login_token << endl;
+            return response.dump();
+            
+        } catch (const exception& e) {
+            return json{{"success", false}, {"error", e.what()}}.dump();
+        }
+    });
+    
+    // 4. Callback от GitHub OAuth
+    server.route("GET", "/api/auth/callback", [&](const string& body, const map<string, string>& headers) {
+        // Парсим query параметры из Request-Path
+        string code = get_query_param(headers, "code");
+        string state = get_query_param(headers, "state");
+        
+        cout << "[Auth] GitHub callback received. Code: " << (code.empty() ? "empty" : "present")
+             << ", State: " << state << endl;
+        
+        if (code.empty() || state.empty()) {
+            return json{{"error", "Missing code or state parameters"}}.dump();
+        }
+        
+        // Проверяем что state начинается с token_
+        if (state.find("token_") != 0) {
+            return json{{"error", "Invalid state format. Expected 'token_<login_token>'"}}.dump();
+        }
+        
+        string login_token = state.substr(6); // Убираем "token_"
+        
+        cout << "[Auth] Processing GitHub callback for token: " << login_token << endl;
+        
+        // Сохраняем код в сессию
+        if (!sessionManager.updateSessionWithCode(login_token, code)) {
+            return json{{"error", "Invalid or expired login_token"}}.dump();
+        }
+        
+        // Асинхронно обрабатываем OAuth (не блокируем ответ)
+        thread([&, login_token, code]() {
+            try {
+                cout << "[Auth] Processing OAuth async for token: " << login_token << endl;
+                
+                // Получаем access token от GitHub
+                string github_access_token = github.getAccessToken(code);
+                if (github_access_token.empty()) {
+                    cerr << "[Auth] Failed to get GitHub access token for token: " << login_token << endl;
+                    sessionManager.setSessionDenied(login_token);
+                    return;
+                }
+                
+                cout << "[Auth] Got GitHub access token for token: " << login_token << endl;
+                
+                // Получаем информацию о пользователе
+                GitHubUser github_user = github.getUserInfo(github_access_token);
+                if (github_user.id.empty()) {
+                    cerr << "[Auth] Failed to get GitHub user info for token: " << login_token << endl;
+                    sessionManager.setSessionDenied(login_token);
+                    return;
+                }
+                
+                cout << "[Auth] GitHub user: " << github_user.login 
+                     << " (" << github_user.name << ")" << endl;
+                
+                // Создаем или обновляем пользователя в базе
+                User user = db.createOrUpdateUser(
+                    github_user.id,
+                    github_user.login,
+                    github_user.email,
+                    github_user.name,
+                    "1", // default course
+                    ""   // no password for GitHub auth
+                );
+                
+                if (user.id.empty()) {
+                    cerr << "[Auth] Failed to save user to database for token: " << login_token << endl;
+                    sessionManager.setSessionDenied(login_token);
+                    return;
+                }
+                
+                cout << "[Auth] User saved to DB: " << user.username << " (ID: " << user.id << ")" << endl;
+                
+                // Генерируем JWT токены
+                map<string, string> payload = {
+                    {"user_id", user.id},
+                    {"username", user.username},
+                    {"email", user.email},
+                    {"fullname", user.full_name},
+                    {"role", user.role},
+                    {"course", user.course}
+                };
+                
+                string access_token = jwt.generateToken(payload);
+                string refresh_token = jwt.generateRefreshToken();
+                
+                // Сохраняем refresh token в базу
+                db.saveRefreshToken(user.id, refresh_token);
+                
+                // Отмечаем сессию как успешную
+                bool success = sessionManager.setSessionSuccess(
+                    login_token,
+                    access_token,
+                    refresh_token,
+                    user.id,
+                    github_user.id
+                );
+                
+                if (success) {
+                    cout << "[Auth] OAuth completed successfully for user: " << user.username 
+                         << " (token: " << login_token << ")" << endl;
+                } else {
+                    cerr << "[Auth] Failed to mark session as success for token: " << login_token << endl;
+                }
+                     
+            } catch (const exception& e) {
+                cerr << "[Auth] Error processing OAuth for token " << login_token << ": " << e.what() << endl;
+                sessionManager.setSessionDenied(login_token);
+            }
+        }).detach();
+        
+        return json{{"status", "processing"}, {"message", "Authentication in progress. Poll /api/auth/status"}}.dump();
+    });
+    
+    // 5. Проверка статуса авторизации
+    server.route("GET", "/api/auth/status", [&](const string& body, const map<string, string>& headers) {
+        // Извлекаем token из query параметров
+        string token = get_query_param(headers, "token");
+        
+        if (token.empty()) {
+            return json{{"error", "Missing token parameter. Use /api/auth/status?token=<login_token>"}}.dump();
+        }
+        
+        cout << "[Auth] Checking status for token: " << token << endl;
+        
+        AuthSession session = sessionManager.getSession(token);
+        
+        json response = {
+            {"token", token},
+            {"status", session.status},
+            {"timestamp", time(nullptr)}
+        };
+        
+        if (session.status == "success") {
+            response["access_token"] = session.access_token;
+            response["refresh_token"] = session.refresh_token;
+            response["user_id"] = session.user_id;
+            response["github_id"] = session.github_id;
+            
+            // Удаляем сессию после успешного получения
+            sessionManager.removeSession(token);
+            cout << "[Auth] Token " << token << " marked as success and removed" << endl;
+        }
+        else if (session.status == "expired") {
+            sessionManager.removeSession(token);
+            cout << "[Auth] Token " << token << " expired and removed" << endl;
+        }
+        else if (session.status == "denied") {
+            sessionManager.removeSession(token);
+            cout << "[Auth] Token " << token << " denied and removed" << endl;
+        }
+        else if (session.status == "pending") {
+            response["message"] = "Authorization still in progress";
+            cout << "[Auth] Token " << token << " still pending" << endl;
+        }
+        
+        return response.dump();
+    });
+    
+    // 6. Валидация JWT токена
+    server.route("POST", "/api/auth/validate", [&](const string& body, const map<string, string>& headers) {
+        string token = extract_token(headers);
+        if (token.empty()) {
+            // Также пробуем из тела запроса
+            try {
+                if (!body.empty()) {
+                    auto data = json::parse(body);
+                    if (data.contains("access_token")) {
+                        token = data["access_token"];
+                    }
+                }
+            } catch (...) {}
+            
+            if (token.empty()) {
+                return json{{"valid", false}, {"error", "No token provided"}}.dump();
+            }
+        }
+        
+        cout << "[Auth] Validating JWT token" << endl;
+        
+        auto claims = jwt.validateToken(token);
+        if (claims.empty()) {
+            return json{{"valid", false}, {"error", "Invalid or expired token"}}.dump();
+        }
+        
+        json user_data;
+        for (const auto& claim : claims) {
+            user_data[claim.first] = claim.second;
+        }
+        
+        return json{{"valid", true}, {"user", user_data}}.dump();
+    });
+    
+    // 7. Обновление токенов
+    server.route("POST", "/api/auth/refresh", [&](const string& body, const map<string, string>& headers) {
         try {
             auto data = json::parse(body);
+            string refresh_token = data["refresh_token"];
+            string user_id = data["user_id"];
+            
+            if (refresh_token.empty() || user_id.empty()) {
+                return json{{"error", "Missing refresh_token or user_id"}}.dump();
+            }
+            
+            cout << "[Auth] Refreshing tokens for user: " << user_id << endl;
+            
+            if (!db.validateRefreshToken(user_id, refresh_token)) {
+                return json{{"error", "Invalid refresh token"}}.dump();
+            }
+            
+            User user = db.getUserById(user_id);
+            if (user.id.empty()) {
+                return json{{"error", "User not found"}}.dump();
+            }
+            
+            // Генерируем новые токены
+            map<string, string> payload = {
+                {"user_id", user.id},
+                {"username", user.username},
+                {"email", user.email},
+                {"fullname", user.full_name},
+                {"role", user.role},
+                {"course", user.course}
+            };
+            
+            string new_access_token = jwt.generateToken(payload);
+            string new_refresh_token = jwt.generateRefreshToken();
+            
+            // Отзываем старый и сохраняем новый refresh token
+            db.revokeRefreshToken(user_id);
+            db.saveRefreshToken(user_id, new_refresh_token);
+            
+            cout << "[Auth] Tokens refreshed for user: " << user.username << endl;
+            
+            return json{
+                {"success", true},
+                {"access_token", new_access_token},
+                {"refresh_token", new_refresh_token}
+            }.dump();
+        } catch (const exception& e) {
+            return json{{"error", "Invalid request: " + string(e.what())}}.dump();
+        }
+    });
+    
+    // 8. Логаут
+    server.route("POST", "/api/auth/logout", [&](const string& body, const map<string, string>& headers) {
+        try {
+            auto data = json::parse(body);
+            string refresh_token = data["refresh_token"];
+            string user_id = data["user_id"];
+            
+            if (refresh_token.empty() || user_id.empty()) {
+                return json{{"success", false}, {"error", "Missing refresh_token or user_id"}}.dump();
+            }
+            
+            cout << "[Auth] Logout requested for user: " << user_id << endl;
+            
+            // Проверяем что токен существует перед отзывом
+            if (!db.validateRefreshToken(user_id, refresh_token)) {
+                return json{{"success", false}, {"error", "Invalid token"}}.dump();
+            }
+            
+            // Отзываем токен
+            db.revokeRefreshToken(user_id);
+            
+            cout << "[Auth] User " << user_id << " logged out (refresh token revoked)" << endl;
+            return json{{"success", true}, {"message", "Logged out successfully"}}.dump();
+            
+        } catch (const exception& e) {
+            return json{{"success", false}, {"error", "Invalid request"}}.dump();
+        }
+    });
+    
+    // ========== НОВЫЕ ЭНДПОИНТЫ: РЕГИСТРАЦИЯ И ЛОГИН ==========
+    
+    // 9. Регистрация с паролем (без GitHub)
+    server.route("POST", "/api/users/register", [&](const string& body, const map<string, string>& headers) {
+        try {
+            auto data = json::parse(body);
+            
+            // Проверка обязательных полей
+            if (!data.contains("username") || !data.contains("email") || 
+                !data.contains("password") || !data.contains("full_name")) {
+                return json{{"success", false}, {"error", "Missing required fields"}}.dump();
+            }
+            
+            string username = data["username"];
+            string email = data["email"];
+            string password = data["password"];
+            string full_name = data["full_name"];
+            string course = data.value("course", "1");
+            string role = data.value("role", "student");
+            
+            // Валидация
+            if (username.empty() || email.empty() || password.empty() || full_name.empty()) {
+                return json{{"success", false}, {"error", "Fields cannot be empty"}}.dump();
+            }
+            
+            if (password.length() < 6) {
+                return json{{"success", false}, {"error", "Password must be at least 6 characters"}}.dump();
+            }
+            
+            // Проверяем, нет ли уже такого пользователя
+            auto all_users = db.getAllUsers();
+            for (const auto& user : all_users) {
+                if (user.username == username) {
+                    return json{{"success", false}, {"error", "Username already exists"}}.dump();
+                }
+                if (user.email == email) {
+                    return json{{"success", false}, {"error", "Email already registered"}}.dump();
+                }
+            }
+            
+            // Хешируем пароль
+            string password_hash = hash_password(password);
+            
+            cout << "[Auth] Registering new user: " << username << " (" << email << ")" << endl;
+            
+            // Создаем пользователя
+            User user = db.createUserWithPassword(
+                username,
+                email,
+                full_name,
+                password_hash,
+                course,
+                role
+            );
+            
+            if (user.id.empty()) {
+                return json{{"success", false}, {"error", "Failed to create user"}}.dump();
+            }
+            
+            // Создаем сессию для немедленного логина
+            string login_token = sessionManager.createSession();
+            
+            // Генерируем JWT токены
+            map<string, string> payload = {
+                {"user_id", user.id},
+                {"username", user.username},
+                {"email", user.email},
+                {"fullname", user.full_name},
+                {"role", user.role},
+                {"course", user.course}
+            };
+            
+            string access_token = jwt.generateToken(payload);
+            string refresh_token = jwt.generateRefreshToken();
+            
+            // Сохраняем refresh token
+            db.saveRefreshToken(user.id, refresh_token);
+            
+            // Помечаем сессию как успешную
+            sessionManager.setSessionSuccess(
+                login_token,
+                access_token,
+                refresh_token,
+                user.id,
+                "" // Нет GitHub ID
+            );
+            
+            cout << "[Auth] User registered successfully: " << username << " (ID: " << user.id << ")" << endl;
+            
+            return json{
+                {"success", true},
+                {"message", "User registered successfully"},
+                {"user_id", user.id},
+                {"username", user.username},
+                {"access_token", access_token},
+                {"refresh_token", refresh_token},
+                {"login_token", login_token} // Для совместимости с polling механизмом
+            }.dump();
+            
+        } catch (const exception& e) {
+            return json{{"success", false}, {"error", "Invalid request: " + string(e.what())}}.dump();
+        }
+    });
+    
+    // 10. Логин с паролем
+    server.route("POST", "/api/users/login", [&](const string& body, const map<string, string>& headers) {
+        try {
+            auto data = json::parse(body);
+            
+            if (!data.contains("username") || !data.contains("password")) {
+                return json{{"success", false}, {"error", "Missing username or password"}}.dump();
+            }
+            
             string username = data["username"];
             string password = data["password"];
             
-            auto users = db.getAllUsers();
+            // Ищем пользователя
+            auto all_users = db.getAllUsers();
             User found_user;
             
-            for (const auto& user : users) {
-                if (user.username == username && user.password_hash == password) {
+            for (const auto& user : all_users) {
+                if (user.username == username) {
                     found_user = user;
                     break;
                 }
             }
             
             if (found_user.id.empty()) {
-                return json{{"success", false}, {"error", "Invalid credentials"}}.dump();
+                return json{{"success", false}, {"error", "User not found"}}.dump();
             }
             
+            // Проверяем пароль (упрощенно - в реальности нужно сравнивать хеши)
+            if (found_user.password_hash != hash_password(password)) {
+                return json{{"success", false}, {"error", "Invalid password"}}.dump();
+            }
+            
+            cout << "[Auth] User login successful: " << username << endl;
+            
+            // Создаем сессию
+            string login_token = sessionManager.createSession();
+            
+            // Генерируем JWT токены
             map<string, string> payload = {
                 {"user_id", found_user.id},
                 {"username", found_user.username},
@@ -261,114 +732,44 @@ void runFullAPIServer(int port, JWT& jwt, SimpleDB& db) {
                 {"course", found_user.course}
             };
             
-            string token = jwt.generateToken(payload);
+            string access_token = jwt.generateToken(payload);
             string refresh_token = jwt.generateRefreshToken();
+            
+            // Сохраняем refresh token
             db.saveRefreshToken(found_user.id, refresh_token);
             
+            // Помечаем сессию как успешную
+            sessionManager.setSessionSuccess(
+                login_token,
+                access_token,
+                refresh_token,
+                found_user.id,
+                found_user.github_id
+            );
+            
             return json{
                 {"success", true},
-                {"token", token},
+                {"message", "Login successful"},
+                {"access_token", access_token},
                 {"refresh_token", refresh_token},
-                {"user", {
-                    {"id", found_user.id},
-                    {"username", found_user.username},
-                    {"email", found_user.email},
-                    {"full_name", found_user.full_name},
-                    {"role", found_user.role},
-                    {"course", found_user.course}
-                }}
+                {"login_token", login_token},
+                {"user_id", found_user.id},
+                {"username", found_user.username}
             }.dump();
-        } catch (...) {
-            return json{{"error", "Invalid request"}}.dump();
-        }
-    });
-    
-    // Validate token
-    server.route("POST", "/api/auth/validate", [&](const string& body, const map<string, string>& headers) {
-        string token = extract_token(headers);
-        if (token.empty()) {
-            return json{{"valid", false}, {"error", "No token"}}.dump();
-        }
-        
-        auto claims = jwt.validateToken(token);
-        if (claims.empty()) {
-            return json{{"valid", false}, {"error", "Invalid token"}}.dump();
-        }
-        
-        return json{{"valid", true}, {"user", claims}}.dump();
-    });
-    
-    // Register new user
-    server.route("POST", "/api/users/register", [&](const string& body, const map<string, string>& headers) {
-        try {
-            auto data = json::parse(body);
-            string username = data["username"];
-            string email = data["email"];
-            string full_name = data["full_name"];
-            string password = data["password"];
-            string course = data.value("course", "1");
-            string role = data.value("role", "student");
             
-            // Check if exists
-            auto users = db.getAllUsers();
-            for (const auto& user : users) {
-                if (user.username == username || user.email == email) {
-                    return json{{"success", false}, {"error", "User exists"}}.dump();
-                }
-            }
-            
-            User new_user = db.createUserWithPassword(username, email, full_name, password, course, role);
-            
-            return json{
-                {"success", true},
-                {"message", "User created"},
-                {"user_id", new_user.id}
-            }.dump();
-        } catch (...) {
-            return json{{"error", "Invalid data"}}.dump();
+        } catch (const exception& e) {
+            return json{{"success", false}, {"error", "Invalid request: " + string(e.what())}}.dump();
         }
     });
     
-    // ========== PROTECTED ENDPOINTS ==========
-    
-    // Get current user
-    server.route("GET", "/api/users/me", [&](const string& body, const map<string, string>& headers) {
+    // 11. Список всех пользователей (только для админов)
+    server.route("GET", "/api/users/list", [&](const string& body, const map<string, string>& headers) {
+        // Проверка авторизации
         string token = extract_token(headers);
-        if (token.empty()) {
-            return json{{"error", "Unauthorized"}}.dump();
-        }
-        
         auto claims = jwt.validateToken(token);
-        if (claims.empty()) {
-            return json{{"error", "Invalid token"}}.dump();
-        }
         
-        User user = db.getUserById(claims["user_id"]);
-        if (user.id.empty()) {
-            return json{{"error", "User not found"}}.dump();
-        }
-        
-        return json{
-            {"id", user.id},
-            {"username", user.username},
-            {"email", user.email},
-            {"full_name", user.full_name},
-            {"role", user.role},
-            {"course", user.course},
-            {"github_id", user.github_id}
-        }.dump();
-    });
-    
-    // Get all users (admin only)
-    server.route("GET", "/api/users", [&](const string& body, const map<string, string>& headers) {
-        string token = extract_token(headers);
-        if (token.empty()) {
-            return json{{"error", "Unauthorized"}}.dump();
-        }
-        
-        auto claims = jwt.validateToken(token);
         if (claims.empty() || claims["role"] != "admin") {
-            return json{{"error", "Admin required"}}.dump();
+            return json{{"success", false}, {"error", "Admin access required"}}.dump();
         }
         
         auto users = db.getAllUsers();
@@ -381,90 +782,97 @@ void runFullAPIServer(int port, JWT& jwt, SimpleDB& db) {
                 {"email", user.email},
                 {"full_name", user.full_name},
                 {"role", user.role},
-                {"course", user.course}
+                {"course", user.course},
+                {"has_github", !user.github_id.empty()}
             });
         }
         
-        return users_json.dump();
+        return json{{"success", true}, {"users", users_json}, {"count", users.size()}}.dump();
     });
     
-    // Refresh token
-    server.route("POST", "/api/auth/refresh", [&](const string& body, const map<string, string>& headers) {
-        try {
-            auto data = json::parse(body);
-            string refresh_token = data["refresh_token"];
-            string user_id = data["user_id"];
-            
-            if (!db.validateRefreshToken(user_id, refresh_token)) {
-                return json{{"error", "Invalid refresh token"}}.dump();
-            }
-            
-            User user = db.getUserById(user_id);
-            if (user.id.empty()) {
-                return json{{"error", "User not found"}}.dump();
-            }
-            
-            map<string, string> payload = {
-                {"user_id", user.id},
+    // 12. Получить информацию о текущем пользователе
+    server.route("GET", "/api/users/me", [&](const string& body, const map<string, string>& headers) {
+        string token = extract_token(headers);
+        if (token.empty()) {
+            return json{{"success", false}, {"error", "No token provided"}}.dump();
+        }
+        
+        auto claims = jwt.validateToken(token);
+        if (claims.empty()) {
+            return json{{"success", false}, {"error", "Invalid token"}}.dump();
+        }
+        
+        User user = db.getUserById(claims["user_id"]);
+        if (user.id.empty()) {
+            return json{{"success", false}, {"error", "User not found"}}.dump();
+        }
+        
+        return json{
+            {"success", true},
+            {"user", {
+                {"id", user.id},
                 {"username", user.username},
                 {"email", user.email},
-                {"fullname", user.full_name},
+                {"full_name", user.full_name},
                 {"role", user.role},
-                {"course", user.course}
-            };
-            
-            string new_token = jwt.generateToken(payload);
-            string new_refresh = jwt.generateRefreshToken();
-            
-            db.revokeRefreshToken(user_id);
-            db.saveRefreshToken(user_id, new_refresh);
-            
-            return json{
-                {"success", true},
-                {"token", new_token},
-                {"refresh_token", new_refresh}
-            }.dump();
-        } catch (...) {
-            return json{{"error", "Invalid request"}}.dump();
-        }
-    });
-    
-    // GitHub OAuth callback (example)
-    server.route("GET", "/auth/github/callback", [&](const string& body, const map<string, string>& headers) {
-        // This would handle GitHub OAuth redirect
-        return json{{"message", "GitHub OAuth endpoint"}}.dump();
-    });
-    
-    // Discovery endpoint (NEW - для xTunnel)
-    server.route("GET", "/api/discovery", [&](const string& body, const map<string, string>& headers) {
-        return json{
-            {"service", "auth_server"},
-            {"version", "2.0"},
-            {"timestamp", time(nullptr)},
-            {"endpoints", {
-                {{"method", "GET"}, {"path", "/health"}, {"description", "Health check"}},
-                {{"method", "POST"}, {"path", "/api/auth/login"}, {"description", "User login"}},
-                {{"method", "POST"}, {"path", "/api/users/register"}, {"description", "User registration"}},
-                {{"method", "GET"}, {"path", "/api/users/me"}, {"description", "Get current user"}},
-                {{"method", "GET"}, {"path", "/api/users"}, {"description", "Get all users (admin)"}},
-                {{"method", "POST"}, {"path", "/api/auth/validate"}, {"description", "Validate JWT token"}}
+                {"course", user.course},
+                {"has_github", !user.github_id.empty()}
             }}
         }.dump();
     });
     
-    // Start server
+    // 13. Эндпоинт для отладки сессий
+    server.route("GET", "/api/auth/debug/sessions", [&](const string& body, const map<string, string>& headers) {
+        auto sessions = sessionManager.getAllSessions();
+        json sessions_json = json::array();
+        
+        for (const auto& session : sessions) {
+            time_t now = time(nullptr);
+            int expires_in = session.expires_at - now;
+            
+            sessions_json.push_back({
+                {"token", session.token},
+                {"status", session.status},
+                {"created_at", session.created_at},
+                {"expires_at", session.expires_at},
+                {"expires_in_seconds", expires_in},
+                {"user_id", session.user_id},
+                {"github_id", session.github_id}
+            });
+        }
+        
+        return json{{"sessions", sessions_json}, {"count", sessions.size()}}.dump();
+    });
+    
+    // ========== ЗАПУСК СЕРВЕРА ==========
+    
     cout << "\n========================================" << endl;
-    cout << "🌐 Auth API Server started on port " << port << endl;
+    cout << "🔐 AUTH MODULE v3.1 (FULL REGISTRATION)" << endl;
+    cout << "🌐 Server Port: " << port << endl;
     cout << "========================================" << endl;
-    cout << "📋 Available endpoints for other modules:" << endl;
-    cout << "  POST /api/auth/login      - Login (get JWT)" << endl;
-    cout << "  POST /api/auth/validate   - Validate JWT" << endl;
-    cout << "  POST /api/auth/refresh    - Refresh token" << endl;
-    cout << "  GET  /api/users/me        - Get current user" << endl;
-    cout << "  POST /api/users/register  - Register new user" << endl;
-    cout << "  GET  /api/users           - Get all users (admin)" << endl;
-    cout << "  GET  /health              - Health check" << endl;
-    cout << "  GET  /api/discovery       - Service discovery" << endl;
+    cout << "📋 API Endpoints:" << endl;
+    cout << endl;
+    cout << "  AUTH VIA GITHUB:" << endl;
+    cout << "    POST /api/auth/init" << endl;
+    cout << "    GET  /api/auth/callback" << endl;
+    cout << "    GET  /api/auth/status" << endl;
+    cout << endl;
+    cout << "  REGISTRATION & LOGIN:" << endl;
+    cout << "    POST /api/users/register" << endl;
+    cout << "    POST /api/users/login" << endl;
+    cout << endl;
+    cout << "  TOKEN MANAGEMENT:" << endl;
+    cout << "    POST /api/auth/validate" << endl;
+    cout << "    POST /api/auth/refresh" << endl;
+    cout << "    POST /api/auth/logout" << endl;
+    cout << endl;
+    cout << "  USER MANAGEMENT:" << endl;
+    cout << "    GET  /api/users/me" << endl;
+    cout << "    GET  /api/users/list (admin only)" << endl;
+    cout << endl;
+    cout << "  UTILITY:" << endl;
+    cout << "    GET  /health" << endl;
+    cout << "    GET  /api/discovery" << endl;
     cout << "========================================\n" << endl;
     
     server.start();
@@ -475,20 +883,21 @@ void runFullAPIServer(int port, JWT& jwt, SimpleDB& db) {
     }
 }
 
-// ========== INTERACTIVE MODE FUNCTIONS ==========
+// ========== ИНТЕРАКТИВНЫЙ РЕЖИМ ==========
 
 void printHelp() {
     cout << "\n=== Auth Module Commands ===" << endl;
     cout << "1. help          - Show this help" << endl;
     cout << "2. test          - Test configuration" << endl;
-    cout << "3. github-auth   - Get GitHub auth URL" << endl;
-    cout << "4. callback CODE - Process GitHub callback" << endl;
-    cout << "5. validate TOKEN- Validate JWT token" << endl;
-    cout << "6. users         - List all users" << endl;
-    cout << "7. test-token    - Generate test JWT token" << endl;
-    cout << "8. create-user   - Create test user" << endl;
-    cout << "9. api-start     - Start API server" << endl;
-    cout << "10. exit         - Exit program" << endl;
+    cout << "3. init          - Create login_token for GitHub auth" << endl;
+    cout << "4. register      - Register new user (interactive)" << endl;
+    cout << "5. login         - Login with username/password" << endl;
+    cout << "6. status TOKEN  - Check auth status" << endl;
+    cout << "7. validate TOKEN- Validate JWT token" << endl;
+    cout << "8. users         - List all users" << endl;
+    cout << "9. sessions      - Show active sessions (debug)" << endl;
+    cout << "10. api-start    - Start API server" << endl;
+    cout << "11. exit         - Exit program" << endl;
     cout << "============================\n" << endl;
 }
 
@@ -498,187 +907,139 @@ void testConfiguration(Config& config, SimpleDB& db) {
     cout << "JWT Secret: " << (config.getJwtSecret().empty() ? "NOT SET" : "SET") << endl;
     cout << "Database file: " << config.getDbFile() << endl;
     
-    if (db.getAllUsers().empty()) {
-        cout << "Database: No users yet" << endl;
-    } else {
-        cout << "Database: " << db.getAllUsers().size() << " users" << endl;
+    auto users = db.getAllUsers();
+    cout << "Database: " << users.size() << " users" << endl;
+    
+    if (!users.empty()) {
+        cout << "First user: " << users[0].username << " (" << users[0].email << ")" << endl;
     }
     cout << "==========================\n" << endl;
 }
 
-void showGitHubAuthURL(GitHubOAuth& github) {
-    cout << "\n=== GitHub Auth URL ===" << endl;
-    cout << "Open this URL in browser:" << endl;
-    cout << github.getAuthorizationUrl() << endl;
-    cout << "========================\n" << endl;
-}
-
-void processGitHubCallback(const string& code, 
-                          GitHubOAuth& github, 
-                          SimpleDB& db, 
-                          JWT& jwt) {
-    cout << "\nProcessing GitHub callback with code: " << code << endl;
+void interactiveRegister(SimpleDB& db, JWT& jwt, AuthSessionManager& sessionManager) {
+    cout << "\n=== User Registration ===" << endl;
     
-    string access_token = github.getAccessToken(code);
-    if (access_token.empty()) {
-        cout << "Error: Failed to get access token" << endl;
-        return;
-    }
+    string username, email, password, full_name, course;
     
-    GitHubUser github_user = github.getUserInfo(access_token);
-    if (github_user.id.empty()) {
-        cout << "Error: Failed to get user info" << endl;
-        return;
-    }
+    cout << "Username: ";
+    getline(cin, username);
     
-    cout << "GitHub User: " << github_user.login 
-         << " (" << github_user.name << ")" << endl;
+    cout << "Email: ";
+    getline(cin, email);
     
-    User user = db.createOrUpdateUser(github_user.id,
-                                    github_user.login,
-                                    github_user.email,
-                                    github_user.name,
-                                    "1",  // default course
-                                    ""); // no password for GitHub auth
+    cout << "Password: ";
+    getline(cin, password);
     
-    if (user.id.empty()) {
-        cout << "Error: Failed to save user" << endl;
-        return;
-    }
+    cout << "Full Name: ";
+    getline(cin, full_name);
     
-    map<string, string> jwt_payload = {
-        {"user_id", user.id},
-        {"username", user.username},
-        {"email", user.email},
-        {"fullname", user.full_name},
-        {"role", user.role},
-        {"course", user.course}
-    };
+    cout << "Course (default: 1): ";
+    getline(cin, course);
+    if (course.empty()) course = "1";
     
-    string jwt_token = jwt.generateToken(jwt_payload);
-    string refresh_token = jwt.generateRefreshToken();
-    
-    db.saveRefreshToken(user.id, refresh_token);
-    
-    cout << "\n=== Authentication Successful ===" << endl;
-    cout << "User ID: " << user.id << endl;
-    cout << "Username: " << user.username << endl;
-    cout << "Email: " << user.email << endl;
-    cout << "Course: " << user.course << endl;
-    cout << "Role: " << user.role << endl;
-    cout << "JWT Token: " << jwt_token << endl;
-    cout << "Refresh Token: " << refresh_token << endl;
-    cout << "===============================\n" << endl;
-}
-
-void validateToken(const string& token, JWT& jwt) {
-    cout << "\nValidating token..." << endl;
-    
-    auto claims = jwt.validateToken(token);
-    if (claims.empty()) {
-        cout << "❌ Token is INVALID or EXPIRED" << endl;
-    } else {
-        cout << "✅ Token is VALID" << endl;
-        cout << "📋 Claims:" << endl;
-        for (const auto& claim : claims) {
-            cout << "  " << claim.first << ": " << claim.second << endl;
+    // Проверяем существование пользователя
+    auto all_users = db.getAllUsers();
+    for (const auto& user : all_users) {
+        if (user.username == username) {
+            cout << "❌ Username already exists!" << endl;
+            return;
+        }
+        if (user.email == email) {
+            cout << "❌ Email already registered!" << endl;
+            return;
         }
     }
-    cout << endl;
-}
-
-void listUsers(SimpleDB& db) {
-    vector<User> users = db.getAllUsers();
     
-    cout << "\n=== Users (" << users.size() << ") ===" << endl;
-    for (const auto& user : users) {
-        cout << "ID: " << user.id << endl;
-        cout << "GitHub: " << user.github_id << " (" << user.username << ")" << endl;
-        cout << "Name: " << user.full_name << endl;
-        cout << "Email: " << user.email << endl;
-        cout << "Role: " << user.role << endl;
-        cout << "Course: " << user.course << endl;
-        cout << "Password hash: " << (user.password_hash.empty() ? "No" : "Yes") << endl;
-        cout << "---" << endl;
-    }
-    cout << "=====================\n" << endl;
-}
-
-void generateTestToken(JWT& jwt) {
-    cout << "\n=== Generating Test JWT Token ===" << endl;
+    // Хешируем пароль
+    string password_hash = hash_password(password);
     
-    map<string, string> test_payload = {
-        {"user_id", "test_user_123"},
-        {"username", "testuser"},
-        {"email", "test@example.com"},
-        {"fullname", "Test User"},
-        {"role", "student"},
-        {"course", "1"}
-    };
-    
-    string test_token = jwt.generateToken(test_payload);
-    cout << "Token: " << test_token << endl;
-    
-    // Show token parts
-    size_t dot1 = test_token.find('.');
-    size_t dot2 = test_token.find('.', dot1 + 1);
-    
-    if (dot1 != string::npos && dot2 != string::npos) {
-        string header_b64 = test_token.substr(0, dot1);
-        string payload_b64 = test_token.substr(dot1 + 1, dot2 - dot1 - 1);
-        
-        cout << "\nHeader (base64): " << header_b64 << endl;
-        cout << "Payload (base64): " << payload_b64 << endl;
-        
-        cout << "Payload (decoded JSON): {" << endl;
-        cout << "  \"user_id\": \"test_user_123\"," << endl;
-        cout << "  \"username\": \"testuser\"," << endl;
-        cout << "  \"email\": \"test@example.com\"," << endl;
-        cout << "  \"fullname\": \"Test User\"," << endl;
-        cout << "  \"role\": \"student\"," << endl;
-        cout << "  \"course\": \"1\"," << endl;
-        cout << "  \"exp\": <timestamp>" << endl;
-        cout << "}" << endl;
-    }
-    
-    cout << "\nUse this token for testing other modules:" << endl;
-    cout << "Header: Authorization: Bearer " << test_token << endl;
-    cout << "========================================\n" << endl;
-}
-
-void createTestUser(SimpleDB& db, JWT& jwt) {
-    cout << "\n=== Creating Test User ===" << endl;
-    
-    User test_user = db.createUserWithPassword(
-        "demo_user",
-        "demo@example.com",
-        "Demo User",
-        "demo123",  // Plain text password (NOT SECURE - for testing only)
-        "1",
+    // Создаем пользователя
+    User user = db.createUserWithPassword(
+        username,
+        email,
+        full_name,
+        password_hash,
+        course,
         "student"
     );
     
-    if (!test_user.id.empty()) {
-        cout << "✅ Test user created successfully!" << endl;
-        cout << "User ID: " << test_user.id << endl;
-        cout << "Username: demo_user" << endl;
-        cout << "Password: demo123" << endl;
-        cout << "\nUse these credentials for testing login API" << endl;
-    } else {
-        cout << "❌ Failed to create test user" << endl;
+    if (user.id.empty()) {
+        cout << "❌ Failed to create user!" << endl;
+        return;
     }
-    cout << "===========================\n" << endl;
+    
+    cout << "✅ User registered successfully!" << endl;
+    cout << "User ID: " << user.id << endl;
+    cout << "Username: " << user.username << endl;
+    cout << "Email: " << user.email << endl;
+    cout << "==========================\n" << endl;
+}
+
+void interactiveLogin(SimpleDB& db, JWT& jwt, AuthSessionManager& sessionManager) {
+    cout << "\n=== User Login ===" << endl;
+    
+    string username, password;
+    
+    cout << "Username: ";
+    getline(cin, username);
+    
+    cout << "Password: ";
+    getline(cin, password);
+    
+    // Ищем пользователя
+    auto all_users = db.getAllUsers();
+    User found_user;
+    
+    for (const auto& user : all_users) {
+        if (user.username == username) {
+            found_user = user;
+            break;
+        }
+    }
+    
+    if (found_user.id.empty()) {
+        cout << "❌ User not found!" << endl;
+        return;
+    }
+    
+    // Проверяем пароль
+    if (found_user.password_hash != hash_password(password)) {
+        cout << "❌ Invalid password!" << endl;
+        return;
+    }
+    
+    // Генерируем токен
+    map<string, string> payload = {
+        {"user_id", found_user.id},
+        {"username", found_user.username},
+        {"email", found_user.email},
+        {"fullname", found_user.full_name},
+        {"role", found_user.role},
+        {"course", found_user.course}
+    };
+    
+    string access_token = jwt.generateToken(payload);
+    string refresh_token = jwt.generateRefreshToken();
+    
+    // Сохраняем refresh token
+    db.saveRefreshToken(found_user.id, refresh_token);
+    
+    cout << "✅ Login successful!" << endl;
+    cout << "Access Token: " << access_token << endl;
+    cout << "Refresh Token: " << refresh_token << endl;
+    cout << "User ID: " << found_user.id << endl;
+    cout << "==========================\n" << endl;
 }
 
 // ========== MAIN FUNCTION ==========
 
 int main(int argc, char* argv[]) {
     cout << "========================================" << endl;
-    cout << "🔐 Student Auth Module v2.0" << endl;
-    cout << "📡 HTTP API Server for Other Modules" << endl;
+    cout << "🔐 Auth Module v3.1 (Full Registration)" << endl;
+    cout << "📡 Support: GitHub OAuth + Password Auth" << endl;
     cout << "========================================" << endl;
     
-    // Check command line arguments
+    // Parse command line arguments
     bool api_mode = false;
     int api_port = 8081;
     bool useXtunnel = false;
@@ -699,60 +1060,54 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--help" || arg == "-h") {
             cout << "\nUsage:" << endl;
             cout << "  " << argv[0] << "                    - Interactive mode" << endl;
-            cout << "  " << argv[0] << " --api             - Start API server on port 8081" << endl;
-            cout << "  " << argv[0] << " --api --port 3000 - API server on custom port" << endl;
-            cout << "  " << argv[0] << " --api --xtunnel   - API server with xTunnel" << endl;
-            cout << "  " << argv[0] << " --api --xtunnel --xtunnel-key YOUR_KEY" << endl;
-            cout << "  " << argv[0] << " --help            - Show this help" << endl;
+            cout << "  " << argv[0] << " --api             - Start API server" << endl;
+            cout << "  " << argv[0] << " --api --port 3000 - Custom port" << endl;
+            cout << "  " << argv[0] << " --api --xtunnel   - With xTunnel" << endl;
+            cout << "  " << argv[0] << " --help            - Show help" << endl;
             return 0;
         }
     }
     
     try {
-        // Initialize components
+        // Initialize core components
         Config config("config.json");
         SimpleDB db(config.getDbFile());
         
-        // xTunnel обработка
+        // xTunnel integration
         if (useXtunnel) {
             cout << "\n========================================" << endl;
             cout << "🔧 XTUNNEL INTEGRATION" << endl;
             cout << "========================================" << endl;
             
             if (!XTunnelSimple::isAvailable()) {
-                cout << "❌ xTunnel not found in xtunnel/ or build/ folders" << endl;
-                cout << "📥 Download it with: powershell -File download_xtunnel.ps1" << endl;
-                cout << "   OR manually from: https://xtunnel.ru" << endl;
+                cout << "⚠️  xTunnel not found" << endl;
                 cout << "📋 Continuing in local-only mode..." << endl;
             } else {
                 cout << "✅ xTunnel found" << endl;
                 
-                // Запускаем туннель
                 if (XTunnelSimple::startTunnel(api_port, xtunnelKey)) {
                     publicUrl = XTunnelSimple::getTunnelUrl();
                     
-                    cout << "\n🌐 PUBLIC URL: " << publicUrl << endl;
-                    cout << "\n📋 For your colleagues:" << endl;
-                    cout << "API Base URL: " << publicUrl << endl;
-                    cout << "Example: " << publicUrl << "/api/auth/login" << endl;
-                    cout << "\n💡 Share this URL with your team!" << endl;
-                    
-                    // Логируем для отладки
-                    cout << "\n📝 Log: GitHub callback will use: " 
-                         << publicUrl << "/auth/github/callback" << endl;
-                } else {
-                    cout << "❌ Failed to start xTunnel" << endl;
+                    if (!publicUrl.empty()) {
+                        cout << "\n🌐 PUBLIC URL: " << publicUrl << endl;
+                        cout << "📋 For team access:" << endl;
+                        cout << "   API: " << publicUrl << "/api/..." << endl;
+                    }
                 }
             }
             cout << "========================================\n" << endl;
         }
         
-        // Используем публичный URL для GitHub если есть, иначе из конфига
+        // Set GitHub redirect URI (use public URL if available)
         string githubRedirectUri;
         if (!publicUrl.empty() && publicUrl.find("https://") == 0) {
-            githubRedirectUri = publicUrl + "/auth/github/callback";
+            githubRedirectUri = publicUrl + "/api/auth/callback";
         } else {
             githubRedirectUri = config.getGithubRedirectUri();
+            // Ensure callback path is correct
+            if (githubRedirectUri.find("/callback") == string::npos) {
+                githubRedirectUri = "http://localhost:" + to_string(api_port) + "/api/auth/callback";
+            }
         }
         
         cout << "🔗 GitHub OAuth redirect URI: " << githubRedirectUri << endl;
@@ -766,17 +1121,24 @@ int main(int argc, char* argv[]) {
         db.initializeDB();
         
         cout << "✅ System initialized successfully" << endl;
-        cout << "API Port: " << api_port << endl;
-        cout << "Database: " << config.getDbFile() << endl;
-        cout << "xTunnel: " << (useXtunnel ? "ENABLED" : "DISABLED") << endl;
+        cout << "📊 Stats:" << endl;
+        cout << "  • API Port: " << api_port << endl;
+        cout << "  • Database: " << config.getDbFile() << " (" << db.getAllUsers().size() << " users)" << endl;
+        cout << "  • xTunnel: " << (useXtunnel ? "ENABLED" : "DISABLED") << endl;
+        if (!publicUrl.empty()) {
+            cout << "  • Public URL: " << publicUrl << endl;
+        }
         cout << "========================================\n" << endl;
         
         if (api_mode) {
             // Run in API server mode
-            runFullAPIServer(api_port, jwt, db);
+            runFullAPIServer(api_port, jwt, db, github);
         } else {
-            // Run in interactive mode
+            // Interactive mode
             printHelp();
+            
+            // Create session manager for interactive mode too
+            AuthSessionManager sessionManager;
             
             string command;
             while (true) {
@@ -789,41 +1151,80 @@ int main(int argc, char* argv[]) {
                 else if (command == "test") {
                     testConfiguration(config, db);
                 }
-                else if (command == "github-auth") {
-                    showGitHubAuthURL(github);
+                else if (command == "init") {
+                    // Test GitHub auth init
+                    string token = sessionManager.createSession();
+                    string auth_url = github.getAuthorizationUrlWithToken(token);
+                    
+                    cout << "\n=== Created GitHub login_token ===" << endl;
+                    cout << "Token: " << token << endl;
+                    cout << "GitHub URL: " << auth_url << endl;
+                    cout << "===========================\n" << endl;
                 }
-                else if (command.find("callback ") == 0) {
-                    string code = command.substr(9);
-                    if (!code.empty()) {
-                        processGitHubCallback(code, github, db, jwt);
-                    } else {
-                        cout << "Error: No code provided" << endl;
+                else if (command == "register") {
+                    interactiveRegister(db, jwt, sessionManager);
+                }
+                else if (command == "login") {
+                    interactiveLogin(db, jwt, sessionManager);
+                }
+                else if (command.find("status ") == 0) {
+                    string token = command.substr(7);
+                    if (!token.empty()) {
+                        AuthSession session = sessionManager.getSession(token);
+                        cout << "\n=== Session Status ===" << endl;
+                        cout << "Token: " << token << endl;
+                        cout << "Status: " << session.status << endl;
+                        if (session.status == "success") {
+                            cout << "User ID: " << session.user_id << endl;
+                            cout << "Access Token: " << session.access_token.substr(0, 30) << "..." << endl;
+                        }
+                        cout << "=====================\n" << endl;
                     }
                 }
                 else if (command.find("validate ") == 0) {
                     string token = command.substr(9);
                     if (!token.empty()) {
-                        validateToken(token, jwt);
-                    } else {
-                        cout << "Error: No token provided" << endl;
+                        auto claims = jwt.validateToken(token);
+                        if (claims.empty()) {
+                            cout << "❌ Token is INVALID or EXPIRED" << endl;
+                        } else {
+                            cout << "✅ Token is VALID" << endl;
+                            cout << "📋 Claims:" << endl;
+                            for (const auto& claim : claims) {
+                                cout << "  " << claim.first << ": " << claim.second << endl;
+                            }
+                        }
                     }
                 }
                 else if (command == "users") {
-                    listUsers(db);
+                    auto users = db.getAllUsers();
+                    cout << "\n=== Users (" << users.size() << ") ===" << endl;
+                    for (const auto& user : users) {
+                        cout << "• " << user.username << " (" << user.email << ")";
+                        if (!user.github_id.empty()) cout << " [GitHub]";
+                        cout << endl;
+                    }
+                    cout << "=====================\n" << endl;
                 }
-                else if (command == "test-token") {
-                    generateTestToken(jwt);
-                }
-                else if (command == "create-user") {
-                    createTestUser(db, jwt);
+                else if (command == "sessions") {
+                    auto sessions = sessionManager.getAllSessions();
+                    cout << "\n=== Active Sessions (" << sessions.size() << ") ===" << endl;
+                    for (const auto& session : sessions) {
+                        cout << "• " << session.token << " [" << session.status << "]";
+                        if (!session.user_id.empty()) {
+                            cout << " → User: " << session.user_id;
+                        }
+                        cout << endl;
+                    }
+                    cout << "==========================\n" << endl;
                 }
                 else if (command == "api-start") {
-                    cout << "Starting API server on port " << api_port << "..." << endl;
-                    runFullAPIServer(api_port, jwt, db);
+                    cout << "🚀 Starting API server on port " << api_port << "..." << endl;
+                    runFullAPIServer(api_port, jwt, db, github);
                     break;
                 }
                 else if (command == "exit" || command == "quit") {
-                    cout << "Goodbye!" << endl;
+                    cout << "👋 Goodbye!" << endl;
                     break;
                 }
                 else if (!command.empty()) {
@@ -833,9 +1234,9 @@ int main(int argc, char* argv[]) {
         }
         
     } catch (const exception& e) {
-        cerr << "❌ Error: " << e.what() << endl;
+        cerr << "❌ Critical Error: " << e.what() << endl;
         
-        // Останавливаем xTunnel при ошибке
+        // Stop xTunnel on error
         if (useXtunnel) {
             XTunnelSimple::stopTunnel();
         }

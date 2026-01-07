@@ -1,0 +1,45 @@
+### Health Check
+GET https://70c3aab4-a0e6-4543-a7b3-b85d4f7e3c7c.tunnel4.com/health
+
+### Discovery
+GET https://70c3aab4-a0e6-4543-a7b3-b85d4f7e3c7c.tunnel4.com/api/discovery
+
+### Register User
+POST https://70c3aab4-a0e6-4543-a7b3-b85d4f7e3c7c.tunnel4.com/api/users/register
+Content-Type: application/json
+
+{
+  "username": "testuser",
+  "email": "test@example.com",
+  "password": "password123",
+  "full_name": "Test User",
+  "course": "1",
+  "role": "student"
+}
+
+### Login
+POST https://70c3aab4-a0e6-4543-a7b3-b85d4f7e3c7c.tunnel4.com/api/users/login
+Content-Type: application/json
+
+{
+  "username": "testuser",
+  "password": "password123"
+}
+
+### Get Current User
+GET https://70c3aab4-a0e6-4543-a7b3-b85d4f7e3c7c.tunnel4.com/api/users/me
+Authorization: Bearer YOUR_JWT_TOKEN
+
+### Validate Token
+POST https://70c3aab4-a0e6-4543-a7b3-b85d4f7e3c7c.tunnel4.com/api/auth/validate
+Authorization: Bearer YOUR_JWT_TOKEN
+
+### GitHub Auth Init
+POST https://70c3aab4-a0e6-4543-a7b3-b85d4f7e3c7c.tunnel4.com/api/auth/init
+
+### Check Auth Status
+GET https://70c3aab4-a0e6-4543-a7b3-b85d4f7e3c7c.tunnel4.com/api/auth/status?token=YOUR_LOGIN_TOKEN
+
+### List Users (Admin only)
+GET https://70c3aab4-a0e6-4543-a7b3-b85d4f7e3c7c.tunnel4.com/api/users/list
+Authorization: Bearer ADMIN_JWT_TOKEN
