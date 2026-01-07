@@ -1,23 +1,30 @@
-# Модуль авторизации (Auth Module)
+📡 API endpoints will be available at:
+   http://localhost:8081/health
+   http://localhost:8081/api/auth/login
+   http://localhost:8081/api/users/me
 
-## Для участников проекта
+========================================
+🔐 Student Auth Module v2.0
+📡 HTTP API Server for Other Modules
+========================================
+Database initialized: users_db.json
 
-Этот модуль предоставляет систему авторизации через GitHub OAuth. Все данные хранятся в облачной MongoDB Atlas.
+API Port: 8081
+Database: users_db.json
+========================================
 
-## Как использовать API
 
-### 1. Авторизация пользователя
-1. Перенаправьте пользователя на: `GET /auth/github`
-2. После авторизации GitHub перенаправит на callback
-3. Получите JWT токен
+========================================
+🌐 Auth API Server started on port 8081
+========================================
+📋 Available endpoints for other modules:
+  POST /api/auth/login      - Login (get JWT)
+  POST /api/auth/validate   - Validate JWT
+  POST /api/auth/refresh    - Refresh token
+  GET  /api/users/me        - Get current user
+  POST /api/users/register  - Register new user
+  GET  /api/users           - Get all users (admin)
+  GET  /health              - Health check
+========================================
 
-### 2. Валидация токенов
-```bash
-# Проверить JWT токен
-GET /auth/validate?token=<jwt_token>
-
-# Обновить токены
-POST /auth/refresh?refresh_token=<refresh_token>&user_id=<user_id>
-
-# Выйти из системы
-POST /auth/logout?token=<jwt_token>&user_id=<user_id>
+✅ HTTP Server started on port 8081
