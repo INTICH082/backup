@@ -1,4 +1,5 @@
 #include "../include/SimpleDB.h"
+#include "../include/precompiled.h"
 #include <ctime>
 #include <random>
 #include <algorithm>
@@ -16,13 +17,11 @@ void SimpleDB::loadDB() {
             data = json::object();
             data["users"] = json::array();
             data["tokens"] = json::array();
-            data["sessions"] = json::array();
         }
     } else {
         data = json::object();
         data["users"] = json::array();
         data["tokens"] = json::array();
-        data["sessions"] = json::array();
         saveDB();
     }
 }
@@ -49,23 +48,19 @@ string SimpleDB::generateId() {
     return id;
 }
 
-bool SimpleDB::testConnection() {
-    return true; // Всегда доступно для файлового хранилища
+time_t SimpleDB::getCurrentTime() {
+    return time(nullptr);
 }
 
 void SimpleDB::initializeDB() {
-    // Убедимся что структуры данных существуют
     if (!data.contains("users")) {
         data["users"] = json::array();
     }
     if (!data.contains("tokens")) {
         data["tokens"] = json::array();
     }
-    if (!data.contains("sessions")) {
-        data["sessions"] = json::array();
-    }
     saveDB();
-    cout << "Database initialized successfully" << endl;
+    cout << "Database initialized: " << db_file << endl;
 }
 
 User SimpleDB::createOrUpdateUser(const string& github_id,
@@ -166,29 +161,18 @@ vector<User> SimpleDB::getAllUsers() {
     return users;
 }
 
-bool SimpleDB::updateUserRole(const string& user_id, const string& role) {
-    for (auto& user : data["users"]) {
-        if (user["id"] == user_id) {
-            user["role"] = role;
-            saveDB();
-            return true;
-        }
-    }
-    return false;
-}
-
 void SimpleDB::saveRefreshToken(const string& user_id, const string& refresh_token) {
     json token;
     token["user_id"] = user_id;
     token["token"] = refresh_token;
-    token["created_at"] = time(nullptr);
+    token["created_at"] = getCurrentTime();
     
     data["tokens"].push_back(token);
     saveDB();
 }
 
 bool SimpleDB::validateRefreshToken(const string& user_id, const string& refresh_token) {
-    time_t now = time(nullptr);
+    time_t now = getCurrentTime();
     
     for (const auto& token : data["tokens"]) {
         if (token["user_id"] == user_id && token["token"] == refresh_token) {
@@ -210,41 +194,5 @@ void SimpleDB::revokeRefreshToken(const string& user_id) {
     }
     
     data["tokens"] = new_tokens;
-    saveDB();
-}
-
-void SimpleDB::createSession(const string& user_id, const string& session_token) {
-    json session;
-    session["user_id"] = user_id;
-    session["session_token"] = session_token;
-    session["created_at"] = time(nullptr);
-    
-    data["sessions"].push_back(session);
-    saveDB();
-}
-
-bool SimpleDB::validateSession(const string& session_token) {
-    time_t now = time(nullptr);
-    
-    for (const auto& session : data["sessions"]) {
-        if (session["session_token"] == session_token) {
-            time_t created_at = session["created_at"].get<time_t>();
-            // Check if session is less than 1 hour old
-            return (now - created_at) < 3600;
-        }
-    }
-    return false;
-}
-
-void SimpleDB::deleteSession(const string& session_token) {
-    json new_sessions = json::array();
-    
-    for (const auto& session : data["sessions"]) {
-        if (session["session_token"] != session_token) {
-            new_sessions.push_back(session);
-        }
-    }
-    
-    data["sessions"] = new_sessions;
     saveDB();
 }

@@ -1,28 +1,28 @@
 #include "../include/JWT.h"
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
-#include <ctime>
-#include <iomanip>
 #include <sstream>
 #include <iostream>
 #include <cstring>
+#include <iomanip>
+#include "../include/precompiled.h"
+#include <cctype>  // для std::isalnum
 
-static const string base64_chars = 
+// Исправлено: убрать static (ошибка storage class)
+const string base64_chars = 
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     "abcdefghijklmnopqrstuvwxyz"
     "0123456789+/";
 
-string JWT::base64_encode(const string& input) {
+string JWT::base64_encode(const unsigned char* input, size_t length) {
     string ret;
     int i = 0;
     int j = 0;
     unsigned char char_array_3[3];
     unsigned char char_array_4[4];
-    size_t in_len = input.size();
-    const char* bytes_to_encode = input.c_str();
     
-    while (in_len--) {
-        char_array_3[i++] = *(bytes_to_encode++);
+    while (length--) {
+        char_array_3[i++] = *(input++);
         if (i == 3) {
             char_array_4[0] = (char_array_3[0] & 0xfc) >> 2;
             char_array_4[1] = ((char_array_3[0] & 0x03) << 4) + ((char_array_3[1] & 0xf0) >> 4);
@@ -62,11 +62,11 @@ string JWT::base64_decode(const string& input) {
     unsigned char char_array_4[4], char_array_3[3];
     string ret;
     
-    while (in_len-- && (input[in_] != '=') && isalnum(input[in_]) || (input[in_] == '+') || (input[in_] == '/')) {
+    while (in_len-- && (input[in_] != '=') && (std::isalnum(static_cast<unsigned char>(input[in_])) || (input[in_] == '+') || (input[in_] == '/'))) {
         char_array_4[i++] = input[in_]; in_++;
         if (i == 4) {
-            for (i = 0; i <4; i++)
-                char_array_4[i] = base64_chars.find(char_array_4[i]);
+            for (i = 0; i < 4; i++)
+                char_array_4[i] = static_cast<unsigned char>(base64_chars.find(char_array_4[i]));
             
             char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
             char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
@@ -83,7 +83,7 @@ string JWT::base64_decode(const string& input) {
             char_array_4[j] = 0;
         
         for (j = 0; j < 4; j++)
-            char_array_4[j] = base64_chars.find(char_array_4[j]);
+            char_array_4[j] = static_cast<unsigned char>(base64_chars.find(char_array_4[j]));
         
         char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
         char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
@@ -98,32 +98,54 @@ string JWT::base64_decode(const string& input) {
 JWT::JWT(const string& secret, int expiry_hours) 
     : secret_key(secret), expiry_hours(expiry_hours) {}
 
-string JWT::sign(const string& header, const string& payload) {
-    string data = base64_encode(header) + "." + base64_encode(payload);
+string JWT::sign(const string& data) {
+    unsigned char digest[32];
+    HMAC(EVP_sha256(), 
+         secret_key.c_str(), static_cast<int>(secret_key.length()),
+         (unsigned char*)data.c_str(), static_cast<int>(data.length()),
+         digest, NULL);
     
-    unsigned char* digest = HMAC(EVP_sha256(), 
-                                 secret_key.c_str(), 
-                                 secret_key.length(),
-                                 (unsigned char*)data.c_str(), 
-                                 data.length(),
-                                 NULL, NULL);
-    
-    string signature;
-    for(int i = 0; i < 32; i++) {
-        char buf[3];
-        sprintf(buf, "%02x", digest[i]);
-        signature += buf;
-    }
-    
-    return base64_encode(signature);
+    return base64_encode(digest, 32);
 }
 
-bool JWT::verify(const string& token) {
+bool JWT::verify(const string& token, const string& signature) {
+    string expected = sign(token);
+    return expected == signature;
+}
+
+string JWT::generateToken(const map<string, string>& payload) {
+    // Header
+    json header;
+    header["alg"] = "HS256";
+    header["typ"] = "JWT";
+    string header_str = header.dump();
+    string header_b64 = base64_encode((unsigned char*)header_str.c_str(), header_str.length());
+    
+    // Payload with expiry
+    json payload_json;
+    for (const auto& pair : payload) {
+        payload_json[pair.first] = pair.second;
+    }
+    
+    time_t now = time(nullptr);
+    // Исправлено: использовать = вместо -=
+    payload_json["exp"] = now + (expiry_hours * 3600);
+    string payload_str = payload_json.dump();
+    string payload_b64 = base64_encode((unsigned char*)payload_str.c_str(), payload_str.length());
+    
+    // Signature
+    string data = header_b64 + "." + payload_b64;
+    string signature = sign(data);
+    
+    return data + "." + signature;
+}
+
+map<string, string> JWT::validateToken(const string& token) {
     size_t dot1 = token.find('.');
     size_t dot2 = token.find('.', dot1 + 1);
     
     if (dot1 == string::npos || dot2 == string::npos) {
-        return false;
+        return {};
     }
     
     string header_b64 = token.substr(0, dot1);
@@ -131,89 +153,37 @@ bool JWT::verify(const string& token) {
     string signature_b64 = token.substr(dot2 + 1);
     
     string data = header_b64 + "." + payload_b64;
-    string expected_signature = sign(base64_decode(header_b64), 
-                                    base64_decode(payload_b64));
     
-    return base64_encode(expected_signature) == signature_b64;
-}
-
-string JWT::generateToken(const map<string, string>& payload) {
-    string header = "{\"alg\":\"HS256\",\"typ\":\"JWT\"}";
-    
-    stringstream payload_ss;
-    payload_ss << "{";
-    bool first = true;
-    
-    time_t now = time(nullptr);
-    time_t expiry = now + (expiry_hours * 3600);
-    payload_ss << "\"exp\":" << expiry;
-    
-    for (const auto& item : payload) {
-        if (!first) payload_ss << ",";
-        first = false;
-        payload_ss << "\"" << item.first << "\":\"" << item.second << "\"";
-    }
-    payload_ss << "}";
-    
-    string signature = sign(header, payload_ss.str());
-    
-    return base64_encode(header) + "." + 
-           base64_encode(payload_ss.str()) + "." + 
-           base64_encode(signature);
-}
-
-map<string, string> JWT::validateToken(const string& token) {
-    if (!verify(token)) {
+    if (!verify(data, base64_decode(signature_b64))) {
         return {};
     }
     
-    map<string, string> claims = decodeToken(token);
+    string payload_str = base64_decode(payload_b64);
+    json payload_json;
     
-    if (claims.find("exp") != claims.end()) {
-        time_t exp = stol(claims["exp"]);
+    try {
+        payload_json = json::parse(payload_str);
+    } catch (...) {
+        return {};
+    }
+    
+    // Check expiry
+    if (payload_json.contains("exp")) {
+        time_t exp = payload_json["exp"];
         time_t now = time(nullptr);
-        
         if (now > exp) {
             return {};
         }
     }
     
-    return claims;
-}
-
-map<string, string> JWT::decodeToken(const string& token) {
-    size_t dot1 = token.find('.');
-    size_t dot2 = token.find('.', dot1 + 1);
-    
-    if (dot1 == string::npos || dot2 == string::npos) {
-        return {};
-    }
-    
-    string payload_b64 = token.substr(dot1 + 1, dot2 - dot1 - 1);
-    string payload = base64_decode(payload_b64);
-    
     map<string, string> claims;
-    
-    size_t pos = 0;
-    while (pos < payload.length()) {
-        size_t key_start = payload.find('"', pos);
-        if (key_start == string::npos) break;
-        
-        size_t key_end = payload.find('"', key_start + 1);
-        if (key_end == string::npos) break;
-        
-        string key = payload.substr(key_start + 1, key_end - key_start - 1);
-        
-        size_t value_start = payload.find('"', key_end + 1);
-        if (value_start == string::npos) break;
-        
-        size_t value_end = payload.find('"', value_start + 1);
-        if (value_end == string::npos) break;
-        
-        string value = payload.substr(value_start + 1, value_end - value_start - 1);
-        
-        claims[key] = value;
-        pos = value_end + 1;
+    for (auto& item : payload_json.items()) {
+        if (item.value().is_string()) {
+            claims[item.key()] = item.value().get<string>();
+        } else if (item.value().is_number_integer()) {
+            // Для чисел (например, exp) преобразуем в строку
+            claims[item.key()] = to_string(item.value().get<int64_t>());
+        }
     }
     
     return claims;
@@ -221,12 +191,11 @@ map<string, string> JWT::decodeToken(const string& token) {
 
 string JWT::generateRefreshToken() {
     const char charset[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-    const int length = 64;
+    const int length = 40;
     
     string token;
-    token.reserve(length);
     
-    srand(time(nullptr));
+    srand(static_cast<unsigned int>(time(nullptr)));
     for (int i = 0; i < length; ++i) {
         token += charset[rand() % (sizeof(charset) - 1)];
     }

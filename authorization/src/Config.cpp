@@ -1,5 +1,6 @@
 #include "../include/Config.h"
 #include <iostream>
+#include "../include/precompiled.h"
 
 Config::Config(const string& config_file) {
     ifstream file(config_file);
@@ -38,10 +39,6 @@ int Config::getJwtExpiryHours() const {
 
 int Config::getServerPort() const {
     return config["server"]["port"];
-}
-
-string Config::getServerHost() const {
-    return config["server"]["host"];
 }
 
 string Config::getDbFile() const {

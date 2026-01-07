@@ -11,7 +11,6 @@ struct GitHubUser {
     string login;
     string name;
     string email;
-    string avatar_url;
 };
 
 class GitHubOAuth {
@@ -29,7 +28,7 @@ public:
                const string& client_secret,
                const string& redirect_uri);
     
-    string getAuthorizationUrl(const string& state = "") const;
+    string getAuthorizationUrl() const;
     string getAccessToken(const string& code);
     GitHubUser getUserInfo(const string& access_token);
 };

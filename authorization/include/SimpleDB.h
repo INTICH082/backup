@@ -6,7 +6,7 @@
 #include <map>
 #include <fstream>
 #include <iostream>
-#include <nlohmann/json.hpp>
+#include "json.hpp"
 
 using namespace std;
 using json = nlohmann::json;
@@ -28,11 +28,11 @@ private:
     void loadDB();
     void saveDB();
     string generateId();
+    time_t getCurrentTime();
     
 public:
-    SimpleDB(const string& db_file = "auth_db.json");
+    SimpleDB(const string& db_file = "users_db.json");
     
-    bool testConnection();
     void initializeDB();
     
     // User operations
@@ -45,17 +45,10 @@ public:
     User getUserByGithubId(const string& github_id);
     vector<User> getAllUsers();
     
-    bool updateUserRole(const string& user_id, const string& role);
-    
     // Token operations
     void saveRefreshToken(const string& user_id, const string& refresh_token);
     bool validateRefreshToken(const string& user_id, const string& refresh_token);
     void revokeRefreshToken(const string& user_id);
-    
-    // Session operations
-    void createSession(const string& user_id, const string& session_token);
-    bool validateSession(const string& session_token);
-    void deleteSession(const string& session_token);
 };
 
 #endif

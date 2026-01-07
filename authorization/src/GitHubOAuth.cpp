@@ -3,6 +3,7 @@
 #include <sstream>
 #include <iostream>
 #include <cstring>
+#include "../include/precompiled.h"
 
 static size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
     ((string*)userp)->append((char*)contents, size * nmemb);
@@ -14,15 +15,10 @@ GitHubOAuth::GitHubOAuth(const string& client_id,
                          const string& redirect_uri)
     : client_id(client_id), client_secret(client_secret), redirect_uri(redirect_uri) {}
 
-string GitHubOAuth::getAuthorizationUrl(const string& state) const {
-    string url = "https://github.com/login/oauth/authorize";
-    url += "?client_id=" + client_id;
-    url += "&redirect_uri=" + redirect_uri;
-    url += "&scope=user:email";
-    if (!state.empty()) {
-        url += "&state=" + state;
-    }
-    return url;
+string GitHubOAuth::getAuthorizationUrl() const {
+    return "https://github.com/login/oauth/authorize?client_id=" + client_id +
+           "&redirect_uri=" + redirect_uri +
+           "&scope=user:email";
 }
 
 string GitHubOAuth::makeHttpRequest(const string& url,
@@ -35,7 +31,7 @@ string GitHubOAuth::makeHttpRequest(const string& url,
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_string);
-        curl_easy_setopt(curl, CURLOPT_USERAGENT, "AuthServer/1.0");
+        curl_easy_setopt(curl, CURLOPT_USERAGENT, "Student-Auth-Server/1.0");
         
         if (!post_data.empty()) {
             curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_data.c_str());
@@ -52,7 +48,7 @@ string GitHubOAuth::makeHttpRequest(const string& url,
         
         CURLcode res = curl_easy_perform(curl);
         if (res != CURLE_OK) {
-            cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << endl;
+            cerr << "HTTP request failed: " << curl_easy_strerror(res) << endl;
         }
         
         if (header_list) {
@@ -79,6 +75,7 @@ string GitHubOAuth::getAccessToken(const string& code) {
     
     string response = makeHttpRequest(token_url, headers, post_data);
     
+    // Simple JSON parsing
     size_t token_pos = response.find("\"access_token\":\"");
     if (token_pos != string::npos) {
         token_pos += 16;
@@ -97,33 +94,31 @@ GitHubUser GitHubOAuth::getUserInfo(const string& access_token) {
     map<string, string> headers = {
         {"Authorization", "token " + access_token},
         {"Accept", "application/json"},
-        {"User-Agent", "AuthServer"}
+        {"User-Agent", "Student-Auth-Server"}
     };
     
     string response = makeHttpRequest(user_url, headers);
     
     GitHubUser user;
     
-    auto extractField = [&response](const string& field) -> string {
+    // Extract fields from JSON response
+    auto extract = [&](const string& field) -> string {
         size_t pos = response.find("\"" + field + "\":");
         if (pos == string::npos) return "";
-        
         pos += field.length() + 3;
-        size_t end_pos = response.find_first_of(",\"}", pos);
-        if (end_pos == string::npos) return "";
-        
-        string value = response.substr(pos, end_pos - pos);
-        if (value.front() == '"' && value.back() == '"') {
-            value = value.substr(1, value.length() - 2);
+        size_t end = response.find_first_of(",\"}", pos);
+        if (end == string::npos) return "";
+        string val = response.substr(pos, end - pos);
+        if (val.size() >= 2 && val[0] == '"' && val.back() == '"') {
+            val = val.substr(1, val.length() - 2);
         }
-        return value;
+        return val;
     };
     
-    user.id = extractField("id");
-    user.login = extractField("login");
-    user.name = extractField("name");
-    user.email = extractField("email");
-    user.avatar_url = extractField("avatar_url");
+    user.id = extract("id");
+    user.login = extract("login");
+    user.name = extract("name");
+    user.email = extract("email");
     
     return user;
 }

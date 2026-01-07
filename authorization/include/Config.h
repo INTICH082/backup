@@ -3,7 +3,7 @@
 
 #include <string>
 #include <fstream>
-#include <nlohmann/json.hpp>
+#include "json.hpp"
 
 using namespace std;
 using json = nlohmann::json;
@@ -26,9 +26,8 @@ public:
     
     // Server config
     int getServerPort() const;
-    string getServerHost() const;
     
-    // Database config (файловое хранилище)
+    // Database config
     string getDbFile() const;
 };
 
