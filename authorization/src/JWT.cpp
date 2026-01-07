@@ -1,3 +1,7 @@
+#ifdef _WIN32
+#define _NO_BYTE
+#endif
+
 #include "../include/JWT.h"
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
@@ -5,8 +9,8 @@
 #include <iostream>
 #include <cstring>
 #include <iomanip>
+#include <cctype>
 #include "../include/precompiled.h"
-#include <cctype>  // для std::isalnum
 
 // Исправлено: убрать static (ошибка storage class)
 const string base64_chars = 

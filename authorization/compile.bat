@@ -1,29 +1,32 @@
 @echo off
-echo Compiling Student Auth Module...
+echo ========================================
+echo 🔐 Compiling Student Auth Module v2.0
+echo ========================================
+echo.
 
-REM Создаем папку build если её нет
-if not exist "build" mkdir build
+REM Download Crow (all-in-one version)
+if not exist "include\crow.h" (
+    echo 📥 Downloading Crow HTTP library (all-in-one)...
+    powershell -Command "Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/ipkn/crow/master/include/crow.h' -OutFile 'include\crow.h'"
+)
 
-echo Cleaning previous build...
-del /Q build\*.o 2>nul
-del /Q build\*.exe 2>nul
-
-echo Compiling files...
-
-REM Компилируем БЕЗ флагов для byte (они уже в precompiled.h)
-g++ -I./include -c src/Config.cpp -o build/Config.o
-g++ -I./include -c src/GitHubOAuth.cpp -o build/GitHubOAuth.o -lcurl
-g++ -I./include -c src/JWT.cpp -o build/JWT.o -lcrypto
-g++ -I./include -c src/SimpleDB.cpp -o build/SimpleDB.o
-g++ -I./include -c src/main.cpp -o build/main.o
-
-echo Linking...
-g++ build/Config.o build/GitHubOAuth.o build/JWT.o build/SimpleDB.o build/main.o -o build/auth_module.exe -lcurl -lcrypto
+echo 🔨 Compiling...
+g++ -std=c++17 ^
+    -Iinclude ^
+    -IC:\vcpkg\installed\x64-windows\include ^
+    -LC:\vcpkg\installed\x64-windows\lib ^
+    -o auth_module.exe ^
+    src/*.cpp ^
+    -lcurl -lssl -lcrypto -lbcrypt -lws2_32 -static -lpthread
 
 if %errorlevel% equ 0 (
-    echo ✅ Build successful!
-    echo 📁 Output: build/auth_module.exe
+    echo ✅ Compilation successful!
+    echo.
+    echo Usage:
+    echo   auth_module.exe               - Interactive mode
+    echo   auth_module.exe --api        - Start API server on port 8081
+    echo   auth_module.exe --api --port 3000  - API server on custom port
 ) else (
-    echo ❌ Build failed!
-    pause
+    echo ❌ Compilation failed!
+    exit /b 1
 )

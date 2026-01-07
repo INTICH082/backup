@@ -1,3 +1,7 @@
+#ifdef _WIN32
+#define _NO_BYTE
+#endif
+
 #include "../include/SimpleDB.h"
 #include "../include/precompiled.h"
 #include <ctime>
@@ -66,7 +70,9 @@ void SimpleDB::initializeDB() {
 User SimpleDB::createOrUpdateUser(const string& github_id,
                                 const string& username,
                                 const string& email,
-                                const string& full_name) {
+                                const string& full_name,
+                                const string& course,
+                                const string& password_hash) {
     
     User existing_user = getUserByGithubId(github_id);
     
@@ -77,11 +83,19 @@ User SimpleDB::createOrUpdateUser(const string& github_id,
                 user["username"] = username;
                 user["email"] = email;
                 user["full_name"] = full_name;
+                user["course"] = course;
+                if (!password_hash.empty()) {
+                    user["password_hash"] = password_hash;
+                }
                 saveDB();
                 
                 existing_user.username = username;
                 existing_user.email = email;
                 existing_user.full_name = full_name;
+                existing_user.course = course;
+                if (!password_hash.empty()) {
+                    existing_user.password_hash = password_hash;
+                }
                 return existing_user;
             }
         }
@@ -94,6 +108,8 @@ User SimpleDB::createOrUpdateUser(const string& github_id,
         new_user.email = email;
         new_user.full_name = full_name;
         new_user.role = "student";
+        new_user.course = course;
+        new_user.password_hash = password_hash;
         
         json user_json;
         user_json["id"] = new_user.id;
@@ -102,6 +118,8 @@ User SimpleDB::createOrUpdateUser(const string& github_id,
         user_json["email"] = email;
         user_json["full_name"] = full_name;
         user_json["role"] = "student";
+        user_json["course"] = course;
+        user_json["password_hash"] = password_hash;
         
         data["users"].push_back(user_json);
         saveDB();
@@ -110,6 +128,39 @@ User SimpleDB::createOrUpdateUser(const string& github_id,
     }
     
     return User{};
+}
+
+User SimpleDB::createUserWithPassword(const string& username,
+                                     const string& email,
+                                     const string& full_name,
+                                     const string& password_hash,
+                                     const string& course,
+                                     const string& role) {
+    // Create new user without GitHub
+    User new_user;
+    new_user.id = generateId();
+    new_user.github_id = "";
+    new_user.username = username;
+    new_user.email = email;
+    new_user.full_name = full_name;
+    new_user.role = role;
+    new_user.course = course;
+    new_user.password_hash = password_hash;
+    
+    json user_json;
+    user_json["id"] = new_user.id;
+    user_json["github_id"] = "";
+    user_json["username"] = username;
+    user_json["email"] = email;
+    user_json["full_name"] = full_name;
+    user_json["role"] = role;
+    user_json["course"] = course;
+    user_json["password_hash"] = password_hash;
+    
+    data["users"].push_back(user_json);
+    saveDB();
+    
+    return new_user;
 }
 
 User SimpleDB::getUserById(const string& user_id) {
@@ -122,6 +173,8 @@ User SimpleDB::getUserById(const string& user_id) {
             u.email = user["email"].get<string>();
             u.full_name = user["full_name"].get<string>();
             u.role = user["role"].get<string>();
+            u.course = user.value("course", "1");
+            u.password_hash = user.value("password_hash", "");
             return u;
         }
     }
@@ -138,6 +191,8 @@ User SimpleDB::getUserByGithubId(const string& github_id) {
             u.email = user["email"].get<string>();
             u.full_name = user["full_name"].get<string>();
             u.role = user["role"].get<string>();
+            u.course = user.value("course", "1");
+            u.password_hash = user.value("password_hash", "");
             return u;
         }
     }
@@ -155,6 +210,8 @@ vector<User> SimpleDB::getAllUsers() {
         u.email = user["email"].get<string>();
         u.full_name = user["full_name"].get<string>();
         u.role = user["role"].get<string>();
+        u.course = user.value("course", "1");
+        u.password_hash = user.value("password_hash", "");
         users.push_back(u);
     }
     

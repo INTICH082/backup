@@ -18,6 +18,8 @@ struct User {
     string email;
     string full_name;
     string role;
+    string course;       // Добавлено
+    string password_hash; // Добавлено (не password, а hash)
 };
 
 class SimpleDB {
@@ -39,7 +41,9 @@ public:
     User createOrUpdateUser(const string& github_id,
                           const string& username,
                           const string& email,
-                          const string& full_name);
+                          const string& full_name,
+                          const string& course = "1",
+                          const string& password_hash = "");
     
     User getUserById(const string& user_id);
     User getUserByGithubId(const string& github_id);
@@ -49,6 +53,14 @@ public:
     void saveRefreshToken(const string& user_id, const string& refresh_token);
     bool validateRefreshToken(const string& user_id, const string& refresh_token);
     void revokeRefreshToken(const string& user_id);
+    
+    // Новые методы
+    User createUserWithPassword(const string& username,
+                               const string& email,
+                               const string& full_name,
+                               const string& password_hash,
+                               const string& course = "1",
+                               const string& role = "student");
 };
 
 #endif
