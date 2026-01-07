@@ -1,15 +1,3 @@
-#ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN
-#include <winsock2.h>
-#include <windows.h>
-#include <ws2tcpip.h>
-#pragma comment(lib, "ws2_32.lib")
-#else
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <unistd.h>
-#endif
-
 #include "../include/Config.h"
 #include "../include/GitHubOAuth.h"
 #include "../include/JWT.h"
@@ -24,10 +12,19 @@
 #include <vector>
 #include <algorithm>
 
+#ifdef _WIN32
+#include "win_clean.h"
+#pragma comment(lib, "ws2_32.lib")
+#else
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <unistd.h>
+#endif
+
 using namespace std;
 using json = nlohmann::json;
 
-// ========== ПРОСТОЙ HTTP СЕРВЕР ==========
+// ========== ПРОСТОЙ HTTP СЕРВЕР НА СИ ==========
 
 class SimpleHTTPServer {
 private:
@@ -163,7 +160,11 @@ public:
         
         // Allow reuse
         int opt = 1;
+#ifdef _WIN32
         setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, (char*)&opt, sizeof(opt));
+#else
+        setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+#endif
         
         sockaddr_in server_addr;
         server_addr.sin_family = AF_INET;
@@ -427,6 +428,12 @@ void runFullAPIServer(int port, JWT& jwt, SimpleDB& db) {
         }
     });
     
+    // GitHub OAuth callback (example)
+    server.route("GET", "/auth/github/callback", [&](const string& body, const map<string, string>& headers) {
+        // This would handle GitHub OAuth redirect
+        return json{{"message", "GitHub OAuth endpoint"}}.dump();
+    });
+    
     // Start server
     cout << "\n========================================" << endl;
     cout << "🌐 Auth API Server started on port " << port << endl;
@@ -449,27 +456,231 @@ void runFullAPIServer(int port, JWT& jwt, SimpleDB& db) {
     }
 }
 
-// ========== [Остальной код интерактивного режима] ==========
-// Вставьте сюда ваши функции: printHelp(), testConfiguration() и т.д.
+// ========== INTERACTIVE MODE FUNCTIONS ==========
+
+void printHelp() {
+    cout << "\n=== Auth Module Commands ===" << endl;
+    cout << "1. help          - Show this help" << endl;
+    cout << "2. test          - Test configuration" << endl;
+    cout << "3. github-auth   - Get GitHub auth URL" << endl;
+    cout << "4. callback CODE - Process GitHub callback" << endl;
+    cout << "5. validate TOKEN- Validate JWT token" << endl;
+    cout << "6. users         - List all users" << endl;
+    cout << "7. test-token    - Generate test JWT token" << endl;
+    cout << "8. create-user   - Create test user" << endl;
+    cout << "9. api-start     - Start API server" << endl;
+    cout << "10. exit         - Exit program" << endl;
+    cout << "============================\n" << endl;
+}
+
+void testConfiguration(Config& config, SimpleDB& db) {
+    cout << "\n=== Configuration Test ===" << endl;
+    cout << "GitHub Client ID: " << config.getGithubClientId() << endl;
+    cout << "JWT Secret: " << (config.getJwtSecret().empty() ? "NOT SET" : "SET") << endl;
+    cout << "Database file: " << config.getDbFile() << endl;
+    
+    if (db.getAllUsers().empty()) {
+        cout << "Database: No users yet" << endl;
+    } else {
+        cout << "Database: " << db.getAllUsers().size() << " users" << endl;
+    }
+    cout << "==========================\n" << endl;
+}
+
+void showGitHubAuthURL(GitHubOAuth& github) {
+    cout << "\n=== GitHub Auth URL ===" << endl;
+    cout << "Open this URL in browser:" << endl;
+    cout << github.getAuthorizationUrl() << endl;
+    cout << "========================\n" << endl;
+}
+
+void processGitHubCallback(const string& code, 
+                          GitHubOAuth& github, 
+                          SimpleDB& db, 
+                          JWT& jwt) {
+    cout << "\nProcessing GitHub callback with code: " << code << endl;
+    
+    string access_token = github.getAccessToken(code);
+    if (access_token.empty()) {
+        cout << "Error: Failed to get access token" << endl;
+        return;
+    }
+    
+    GitHubUser github_user = github.getUserInfo(access_token);
+    if (github_user.id.empty()) {
+        cout << "Error: Failed to get user info" << endl;
+        return;
+    }
+    
+    cout << "GitHub User: " << github_user.login 
+         << " (" << github_user.name << ")" << endl;
+    
+    User user = db.createOrUpdateUser(github_user.id,
+                                    github_user.login,
+                                    github_user.email,
+                                    github_user.name,
+                                    "1",  // default course
+                                    ""); // no password for GitHub auth
+    
+    if (user.id.empty()) {
+        cout << "Error: Failed to save user" << endl;
+        return;
+    }
+    
+    map<string, string> jwt_payload = {
+        {"user_id", user.id},
+        {"username", user.username},
+        {"email", user.email},
+        {"fullname", user.full_name},
+        {"role", user.role},
+        {"course", user.course}
+    };
+    
+    string jwt_token = jwt.generateToken(jwt_payload);
+    string refresh_token = jwt.generateRefreshToken();
+    
+    db.saveRefreshToken(user.id, refresh_token);
+    
+    cout << "\n=== Authentication Successful ===" << endl;
+    cout << "User ID: " << user.id << endl;
+    cout << "Username: " << user.username << endl;
+    cout << "Email: " << user.email << endl;
+    cout << "Course: " << user.course << endl;
+    cout << "Role: " << user.role << endl;
+    cout << "JWT Token: " << jwt_token << endl;
+    cout << "Refresh Token: " << refresh_token << endl;
+    cout << "===============================\n" << endl;
+}
+
+void validateToken(const string& token, JWT& jwt) {
+    cout << "\nValidating token..." << endl;
+    
+    auto claims = jwt.validateToken(token);
+    if (claims.empty()) {
+        cout << "❌ Token is INVALID or EXPIRED" << endl;
+    } else {
+        cout << "✅ Token is VALID" << endl;
+        cout << "📋 Claims:" << endl;
+        for (const auto& claim : claims) {
+            cout << "  " << claim.first << ": " << claim.second << endl;
+        }
+    }
+    cout << endl;
+}
+
+void listUsers(SimpleDB& db) {
+    vector<User> users = db.getAllUsers();
+    
+    cout << "\n=== Users (" << users.size() << ") ===" << endl;
+    for (const auto& user : users) {
+        cout << "ID: " << user.id << endl;
+        cout << "GitHub: " << user.github_id << " (" << user.username << ")" << endl;
+        cout << "Name: " << user.full_name << endl;
+        cout << "Email: " << user.email << endl;
+        cout << "Role: " << user.role << endl;
+        cout << "Course: " << user.course << endl;
+        cout << "Password hash: " << (user.password_hash.empty() ? "No" : "Yes") << endl;
+        cout << "---" << endl;
+    }
+    cout << "=====================\n" << endl;
+}
+
+void generateTestToken(JWT& jwt) {
+    cout << "\n=== Generating Test JWT Token ===" << endl;
+    
+    map<string, string> test_payload = {
+        {"user_id", "test_user_123"},
+        {"username", "testuser"},
+        {"email", "test@example.com"},
+        {"fullname", "Test User"},
+        {"role", "student"},
+        {"course", "1"}
+    };
+    
+    string test_token = jwt.generateToken(test_payload);
+    cout << "Token: " << test_token << endl;
+    
+    // Show token parts
+    size_t dot1 = test_token.find('.');
+    size_t dot2 = test_token.find('.', dot1 + 1);
+    
+    if (dot1 != string::npos && dot2 != string::npos) {
+        string header_b64 = test_token.substr(0, dot1);
+        string payload_b64 = test_token.substr(dot1 + 1, dot2 - dot1 - 1);
+        
+        cout << "\nHeader (base64): " << header_b64 << endl;
+        cout << "Payload (base64): " << payload_b64 << endl;
+        
+        cout << "Payload (decoded JSON): {" << endl;
+        cout << "  \"user_id\": \"test_user_123\"," << endl;
+        cout << "  \"username\": \"testuser\"," << endl;
+        cout << "  \"email\": \"test@example.com\"," << endl;
+        cout << "  \"fullname\": \"Test User\"," << endl;
+        cout << "  \"role\": \"student\"," << endl;
+        cout << "  \"course\": \"1\"," << endl;
+        cout << "  \"exp\": <timestamp>" << endl;
+        cout << "}" << endl;
+    }
+    
+    cout << "\nUse this token for testing other modules:" << endl;
+    cout << "Header: Authorization: Bearer " << test_token << endl;
+    cout << "========================================\n" << endl;
+}
+
+void createTestUser(SimpleDB& db, JWT& jwt) {
+    cout << "\n=== Creating Test User ===" << endl;
+    
+    User test_user = db.createUserWithPassword(
+        "demo_user",
+        "demo@example.com",
+        "Demo User",
+        "demo123",  // Plain text password (NOT SECURE - for testing only)
+        "1",
+        "student"
+    );
+    
+    if (!test_user.id.empty()) {
+        cout << "✅ Test user created successfully!" << endl;
+        cout << "User ID: " << test_user.id << endl;
+        cout << "Username: demo_user" << endl;
+        cout << "Password: demo123" << endl;
+        cout << "\nUse these credentials for testing login API" << endl;
+    } else {
+        cout << "❌ Failed to create test user" << endl;
+    }
+    cout << "===========================\n" << endl;
+}
+
+// ========== MAIN FUNCTION ==========
 
 int main(int argc, char* argv[]) {
+    cout << "========================================" << endl;
     cout << "🔐 Student Auth Module v2.0" << endl;
-    cout << "📡 Full HTTP API for other modules" << endl;
+    cout << "📡 HTTP API Server for Other Modules" << endl;
+    cout << "========================================" << endl;
     
+    // Check command line arguments
     bool api_mode = false;
     int api_port = 8081;
     
     for (int i = 1; i < argc; i++) {
         string arg = argv[i];
-        if (arg == "--api" || arg == "-a") api_mode = true;
-        else if ((arg == "--port" || arg == "-p") && i + 1 < argc) api_port = stoi(argv[++i]);
-        else if (arg == "--help") {
-            cout << "Usage: auth_module.exe --api [--port 8081]" << endl;
+        if (arg == "--api" || arg == "-a") {
+            api_mode = true;
+        } else if ((arg == "--port" || arg == "-p") && i + 1 < argc) {
+            api_port = stoi(argv[++i]);
+        } else if (arg == "--help" || arg == "-h") {
+            cout << "\nUsage:" << endl;
+            cout << "  " << argv[0] << "                    - Interactive mode" << endl;
+            cout << "  " << argv[0] << " --api             - Start API server on port 8081" << endl;
+            cout << "  " << argv[0] << " --api --port 3000 - API server on custom port" << endl;
+            cout << "  " << argv[0] << " --help            - Show this help" << endl;
             return 0;
         }
     }
     
     try {
+        // Initialize components
         Config config("config.json");
         SimpleDB db(config.getDbFile());
         GitHubOAuth github(config.getGithubClientId(),
@@ -479,13 +690,70 @@ int main(int argc, char* argv[]) {
         
         db.initializeDB();
         
-        cout << "✅ System ready on port " << api_port << endl;
+        cout << "✅ System initialized successfully" << endl;
+        cout << "API Port: " << api_port << endl;
+        cout << "Database: " << config.getDbFile() << endl;
+        cout << "========================================\n" << endl;
         
         if (api_mode) {
+            // Run in API server mode
             runFullAPIServer(api_port, jwt, db);
         } else {
-            // [Ваш интерактивный режим]
-            cout << "Interactive mode not implemented for API server" << endl;
+            // Run in interactive mode
+            printHelp();
+            
+            string command;
+            while (true) {
+                cout << "auth> ";
+                getline(cin, command);
+                
+                if (command == "help" || command == "?") {
+                    printHelp();
+                }
+                else if (command == "test") {
+                    testConfiguration(config, db);
+                }
+                else if (command == "github-auth") {
+                    showGitHubAuthURL(github);
+                }
+                else if (command.find("callback ") == 0) {
+                    string code = command.substr(9);
+                    if (!code.empty()) {
+                        processGitHubCallback(code, github, db, jwt);
+                    } else {
+                        cout << "Error: No code provided" << endl;
+                    }
+                }
+                else if (command.find("validate ") == 0) {
+                    string token = command.substr(9);
+                    if (!token.empty()) {
+                        validateToken(token, jwt);
+                    } else {
+                        cout << "Error: No token provided" << endl;
+                    }
+                }
+                else if (command == "users") {
+                    listUsers(db);
+                }
+                else if (command == "test-token") {
+                    generateTestToken(jwt);
+                }
+                else if (command == "create-user") {
+                    createTestUser(db, jwt);
+                }
+                else if (command == "api-start") {
+                    cout << "Starting API server on port " << api_port << "..." << endl;
+                    runFullAPIServer(api_port, jwt, db);
+                    break;
+                }
+                else if (command == "exit" || command == "quit") {
+                    cout << "Goodbye!" << endl;
+                    break;
+                }
+                else if (!command.empty()) {
+                    cout << "Unknown command. Type 'help' for commands." << endl;
+                }
+            }
         }
         
     } catch (const exception& e) {

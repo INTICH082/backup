@@ -1,3 +1,8 @@
+#ifdef _WIN32
+#undef byte
+#define _NO_BYTE
+#endif
+
 #include "../include/Config.h"
 #include <iostream>
 #include "../include/precompiled.h"

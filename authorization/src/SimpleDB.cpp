@@ -1,7 +1,3 @@
-#ifdef _WIN32
-#define _NO_BYTE
-#endif
-
 #include "../include/SimpleDB.h"
 #include "../include/precompiled.h"
 #include <ctime>

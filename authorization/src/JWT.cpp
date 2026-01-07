@@ -1,7 +1,3 @@
-#ifdef _WIN32
-#define _NO_BYTE
-#endif
-
 #include "../include/JWT.h"
 #include <openssl/hmac.h>
 #include <openssl/sha.h>

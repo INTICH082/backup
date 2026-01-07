@@ -1,20 +1,3 @@
-// CRITICAL FIX: Prevent Windows byte conflict
-#ifdef _WIN32
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-// Prevent std::byte inclusion
-#define _HAS_STD_BYTE 0
-#endif
-
-// Добавьте эти строки ПЕРЕД #include <curl/curl.h>
-#include <winsock2.h>
-#include <windows.h>
-#undef byte  // Удаляем Windows byte definition
-
 #include "../include/GitHubOAuth.h"
 #include <curl/curl.h>
 #include <sstream>
