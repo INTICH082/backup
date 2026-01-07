@@ -1,19 +1,30 @@
+#ifdef _WIN32
+#undef byte
+#define _NO_BYTE
+#endif
+
+#include "../include/precompiled.h"
 #include "../include/GitHubOAuth.h"
 #include <curl/curl.h>
 #include <sstream>
 #include <iostream>
 #include <cstring>
-#include "../include/precompiled.h"
 
 static size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
     ((string*)userp)->append((char*)contents, size * nmemb);
     return size * nmemb;
 }
 
+// === ИЗМЕНЕННЫЙ КОНСТРУКТОР ===
 GitHubOAuth::GitHubOAuth(const string& client_id,
                          const string& client_secret,
                          const string& redirect_uri)
-    : client_id(client_id), client_secret(client_secret), redirect_uri(redirect_uri) {}
+    : client_id(client_id), client_secret(client_secret), redirect_uri(redirect_uri) 
+{
+    // Логирование для отладки
+    cout << "[GitHubOAuth] Initialized with redirect URI: " << redirect_uri << endl;
+}
+// ===============================
 
 string GitHubOAuth::getAuthorizationUrl() const {
     return "https://github.com/login/oauth/authorize?client_id=" + client_id +

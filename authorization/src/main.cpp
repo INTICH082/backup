@@ -1,8 +1,9 @@
+#include "../include/precompiled.h"
 #include "../include/Config.h"
 #include "../include/GitHubOAuth.h"
 #include "../include/JWT.h"
 #include "../include/SimpleDB.h"
-#include "../include/precompiled.h"
+#include "../include/XTunnelSimple.h"  
 
 #include <iostream>
 #include <sstream>
@@ -434,6 +435,23 @@ void runFullAPIServer(int port, JWT& jwt, SimpleDB& db) {
         return json{{"message", "GitHub OAuth endpoint"}}.dump();
     });
     
+    // Discovery endpoint (NEW - для xTunnel)
+    server.route("GET", "/api/discovery", [&](const string& body, const map<string, string>& headers) {
+        return json{
+            {"service", "auth_server"},
+            {"version", "2.0"},
+            {"timestamp", time(nullptr)},
+            {"endpoints", {
+                {{"method", "GET"}, {"path", "/health"}, {"description", "Health check"}},
+                {{"method", "POST"}, {"path", "/api/auth/login"}, {"description", "User login"}},
+                {{"method", "POST"}, {"path", "/api/users/register"}, {"description", "User registration"}},
+                {{"method", "GET"}, {"path", "/api/users/me"}, {"description", "Get current user"}},
+                {{"method", "GET"}, {"path", "/api/users"}, {"description", "Get all users (admin)"}},
+                {{"method", "POST"}, {"path", "/api/auth/validate"}, {"description", "Validate JWT token"}}
+            }}
+        }.dump();
+    });
+    
     // Start server
     cout << "\n========================================" << endl;
     cout << "🌐 Auth API Server started on port " << port << endl;
@@ -446,6 +464,7 @@ void runFullAPIServer(int port, JWT& jwt, SimpleDB& db) {
     cout << "  POST /api/users/register  - Register new user" << endl;
     cout << "  GET  /api/users           - Get all users (admin)" << endl;
     cout << "  GET  /health              - Health check" << endl;
+    cout << "  GET  /api/discovery       - Service discovery" << endl;
     cout << "========================================\n" << endl;
     
     server.start();
@@ -662,6 +681,9 @@ int main(int argc, char* argv[]) {
     // Check command line arguments
     bool api_mode = false;
     int api_port = 8081;
+    bool useXtunnel = false;
+    string xtunnelKey = "";
+    string publicUrl = "";
     
     for (int i = 1; i < argc; i++) {
         string arg = argv[i];
@@ -669,11 +691,18 @@ int main(int argc, char* argv[]) {
             api_mode = true;
         } else if ((arg == "--port" || arg == "-p") && i + 1 < argc) {
             api_port = stoi(argv[++i]);
+        } else if (arg == "--xtunnel" || arg == "-x") {
+            useXtunnel = true;
+        } else if (arg == "--xtunnel-key" && i + 1 < argc) {
+            xtunnelKey = argv[++i];
+            useXtunnel = true;
         } else if (arg == "--help" || arg == "-h") {
             cout << "\nUsage:" << endl;
             cout << "  " << argv[0] << "                    - Interactive mode" << endl;
             cout << "  " << argv[0] << " --api             - Start API server on port 8081" << endl;
             cout << "  " << argv[0] << " --api --port 3000 - API server on custom port" << endl;
+            cout << "  " << argv[0] << " --api --xtunnel   - API server with xTunnel" << endl;
+            cout << "  " << argv[0] << " --api --xtunnel --xtunnel-key YOUR_KEY" << endl;
             cout << "  " << argv[0] << " --help            - Show this help" << endl;
             return 0;
         }
@@ -683,9 +712,55 @@ int main(int argc, char* argv[]) {
         // Initialize components
         Config config("config.json");
         SimpleDB db(config.getDbFile());
+        
+        // xTunnel обработка
+        if (useXtunnel) {
+            cout << "\n========================================" << endl;
+            cout << "🔧 XTUNNEL INTEGRATION" << endl;
+            cout << "========================================" << endl;
+            
+            if (!XTunnelSimple::isAvailable()) {
+                cout << "❌ xTunnel not found in xtunnel/ or build/ folders" << endl;
+                cout << "📥 Download it with: powershell -File download_xtunnel.ps1" << endl;
+                cout << "   OR manually from: https://xtunnel.ru" << endl;
+                cout << "📋 Continuing in local-only mode..." << endl;
+            } else {
+                cout << "✅ xTunnel found" << endl;
+                
+                // Запускаем туннель
+                if (XTunnelSimple::startTunnel(api_port, xtunnelKey)) {
+                    publicUrl = XTunnelSimple::getTunnelUrl();
+                    
+                    cout << "\n🌐 PUBLIC URL: " << publicUrl << endl;
+                    cout << "\n📋 For your colleagues:" << endl;
+                    cout << "API Base URL: " << publicUrl << endl;
+                    cout << "Example: " << publicUrl << "/api/auth/login" << endl;
+                    cout << "\n💡 Share this URL with your team!" << endl;
+                    
+                    // Логируем для отладки
+                    cout << "\n📝 Log: GitHub callback will use: " 
+                         << publicUrl << "/auth/github/callback" << endl;
+                } else {
+                    cout << "❌ Failed to start xTunnel" << endl;
+                }
+            }
+            cout << "========================================\n" << endl;
+        }
+        
+        // Используем публичный URL для GitHub если есть, иначе из конфига
+        string githubRedirectUri;
+        if (!publicUrl.empty() && publicUrl.find("https://") == 0) {
+            githubRedirectUri = publicUrl + "/auth/github/callback";
+        } else {
+            githubRedirectUri = config.getGithubRedirectUri();
+        }
+        
+        cout << "🔗 GitHub OAuth redirect URI: " << githubRedirectUri << endl;
+        
         GitHubOAuth github(config.getGithubClientId(),
                           config.getGithubClientSecret(),
-                          config.getGithubRedirectUri());
+                          githubRedirectUri);
+        
         JWT jwt(config.getJwtSecret(), config.getJwtExpiryHours());
         
         db.initializeDB();
@@ -693,6 +768,7 @@ int main(int argc, char* argv[]) {
         cout << "✅ System initialized successfully" << endl;
         cout << "API Port: " << api_port << endl;
         cout << "Database: " << config.getDbFile() << endl;
+        cout << "xTunnel: " << (useXtunnel ? "ENABLED" : "DISABLED") << endl;
         cout << "========================================\n" << endl;
         
         if (api_mode) {
@@ -758,7 +834,18 @@ int main(int argc, char* argv[]) {
         
     } catch (const exception& e) {
         cerr << "❌ Error: " << e.what() << endl;
+        
+        // Останавливаем xTunnel при ошибке
+        if (useXtunnel) {
+            XTunnelSimple::stopTunnel();
+        }
+        
         return 1;
+    }
+    
+    // Cleanup xTunnel
+    if (useXtunnel) {
+        XTunnelSimple::stopTunnel();
     }
     
     return 0;

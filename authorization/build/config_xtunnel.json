@@ -1,0 +1,15 @@
+{
+  "server": {
+    "port": 8081,
+    "jwt_secret": "iplaygodotandclaimfun",
+    "jwt_expiry_hours": 24
+  },
+  "github": {
+    "client_id": "Ov23lisJdUcb1DmKhIfe",
+    "client_secret": "897dbebdde0fcb173d22f45f53de423bb7bb44ac",
+    "redirect_uri": "auto"
+  },
+  "database": {
+    "file": "users_db.json"
+  }
+}

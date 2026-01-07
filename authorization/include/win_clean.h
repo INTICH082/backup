@@ -13,23 +13,21 @@
 #define NOMINMAX
 #endif
 
-// Временно переименовываем byte на время инклюдов
-#define byte windows_byte
-#define _byte windows_byte_
+// Сохраняем состояние
+#ifdef byte
+#pragma message("Warning: byte is already defined before including Windows headers")
+#undef byte
+#endif
 
 // Включаем минимальные Windows заголовки
-#include <windows.h>
-
-// Немедленно отменяем переименование
-#undef byte
-#undef _byte
-
-// Восстанавливаем для совместимости
-typedef unsigned char byte;
-
-// Подключаем специфичные для сети заголовки
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <windows.h>
+
+// Очищаем после инклюдов если что-то осталось
+#ifdef byte
+#undef byte
+#endif
 
 #endif // _WIN32
 
