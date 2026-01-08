@@ -1,6 +1,6 @@
 {
   "server": {
-    "port": 8083,
+    "port": 8081,
     "jwt_secret": "iplaygodotandclaimfun",
     "jwt_expiry_hours": 24
   },
