@@ -196,6 +196,83 @@ User SimpleDB::getUserByGithubId(const string& github_id) {
     return User{};
 }
 
+User SimpleDB::getUserByUsername(const string& username) {
+    for (const auto& user : data["users"]) {
+        if (user["username"] == username) {
+            User u;
+            u.id = user["id"].get<string>();
+            u.github_id = user["github_id"].get<string>();
+            u.username = user["username"].get<string>();
+            u.email = user["email"].get<string>();
+            u.full_name = user["full_name"].get<string>();
+            u.role = user["role"].get<string>();
+            u.course = user.value("course", "1");
+            u.password_hash = user.value("password_hash", "");
+            return u;
+        }
+    }
+    return User{};
+}
+
+User SimpleDB::getUserByEmail(const string& email) {
+    for (const auto& user : data["users"]) {
+        if (user["email"] == email) {
+            User u;
+            u.id = user["id"].get<string>();
+            u.github_id = user["github_id"].get<string>();
+            u.username = user["username"].get<string>();
+            u.email = user["email"].get<string>();
+            u.full_name = user["full_name"].get<string>();
+            u.role = user["role"].get<string>();
+            u.course = user.value("course", "1");
+            u.password_hash = user.value("password_hash", "");
+            return u;
+        }
+    }
+    return User{};
+}
+
+bool SimpleDB::updateUser(const string& user_id, const map<string, string>& updates) {
+    for (auto& user : data["users"]) {
+        if (user["id"] == user_id) {
+            for (const auto& update : updates) {
+                if (update.first == "full_name" || update.first == "email" || 
+                    update.first == "course" || update.first == "role") {
+                    user[update.first] = update.second;
+                }
+            }
+            saveDB();
+            
+            cout << "[SimpleDB] Updated user: " << user_id << endl;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool SimpleDB::deleteUser(const string& user_id) {
+    for (size_t i = 0; i < data["users"].size(); ++i) {
+        if (data["users"][i]["id"] == user_id) {
+            data["users"].erase(data["users"].begin() + i);
+            
+            // Также удаляем токены пользователя
+            json new_tokens = json::array();
+            for (const auto& token : data["tokens"]) {
+                if (token["user_id"] != user_id) {
+                    new_tokens.push_back(token);
+                }
+            }
+            data["tokens"] = new_tokens;
+            
+            saveDB();
+            
+            cout << "[SimpleDB] Deleted user: " << user_id << endl;
+            return true;
+        }
+    }
+    return false;
+}
+
 vector<User> SimpleDB::getAllUsers() {
     vector<User> users;
     

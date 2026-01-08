@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 echo ========================================
-echo 🔧 COMPILING WITH MINGW + XTUNNEL
+echo 🔧 COMPILING TASK FLOW WITH MINGW
 echo ========================================
 echo.
 
@@ -28,7 +28,6 @@ del /q build\auth_module.exe 2>nul
 echo 📄 Compiling source files...
 echo.
 
-REM Упрощенные флаги компиляции
 set COMPILE_FLAGS=-std=c++17 -D_CRT_SECURE_NO_WARNINGS
 
 REM Компилируем все файлы
@@ -52,11 +51,15 @@ echo 5. SimpleDB.cpp...
 g++ -c src/SimpleDB.cpp -o build/SimpleDB.o -Iinclude %COMPILE_FLAGS%
 if %errorlevel% neq 0 goto :error
 
-echo 6. XTunnelSimple.cpp...
+echo 6. TaskDB.cpp...
+g++ -c src/TaskDB.cpp -o build/TaskDB.o -Iinclude %COMPILE_FLAGS%
+if %errorlevel% neq 0 goto :error
+
+echo 7. XTunnelSimple.cpp...
 g++ -c src/XTunnelSimple.cpp -o build/XTunnelSimple.o -Iinclude %COMPILE_FLAGS%
 if %errorlevel% neq 0 goto :error
 
-echo 7. AutoSessionManager.cpp...
+echo 8. AutoSessionManager.cpp...
 g++ -c src/AutoSessionManager.cpp -o build/AutoSessionManager.o -Iinclude -std=c++17
 if %errorlevel% neq 0 goto :error
 
@@ -65,7 +68,7 @@ echo ✅ All files compiled successfully!
 echo.
 
 echo 🔗 Linking executable...
-g++ build/main.o build/Config.o build/GitHubOAuth.o build/JWT.o build/SimpleDB.o build/XTunnelSimple.o build/AutoSessionManager.o -o build/auth_module.exe -lcurl -lssl -lcrypto -lws2_32 -std=c++17
+g++ build/main.o build/Config.o build/GitHubOAuth.o build/JWT.o build/SimpleDB.o build/TaskDB.o build/XTunnelSimple.o build/AutoSessionManager.o -o build/auth_module.exe -lcurl -lssl -lcrypto -lws2_32 -std=c++17
 
 if %errorlevel% equ 0 (
     echo.
@@ -75,7 +78,7 @@ if %errorlevel% equ 0 (
     echo 📏 Size: 
     for %%F in (build\auth_module.exe) do echo   %%~zF bytes
     echo.
-    echo 🚀 Available launch options:
+    echo 🚀 TASK FLOW LAUNCH OPTIONS:
     echo.
     echo   1. LOCAL ONLY (for testing):
     echo      build\auth_module.exe --api
@@ -94,6 +97,16 @@ if %errorlevel% equ 0 (
     echo   - Get API key from https://xtunnel.ru
     echo   - Save key to xtunnel_key.txt
     echo   - Run: run_with_xtunnel.bat
+    echo.
+    echo 📊 TASK FLOW FEATURES:
+    echo   - User authentication (GitHub + password)
+    echo   - Project management
+    echo   - Task management with status tracking
+    echo   - Comments on tasks
+    echo   - Notifications system
+    echo   - Tag system for tasks
+    echo   - Search and filtering
+    echo   - Statistics and reporting
     echo.
 ) else (
     :error

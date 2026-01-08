@@ -61,6 +61,11 @@ public:
                                const string& password_hash,
                                const string& course = "1",
                                const string& role = "student");
+
+    User getUserByUsername(const string& username);
+    User getUserByEmail(const string& email);
+    bool updateUser(const string& user_id, const map<string, string>& updates);
+    bool deleteUser(const string& user_id);
 };
 
 #endif
