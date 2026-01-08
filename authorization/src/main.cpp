@@ -3,8 +3,8 @@
 #include "../include/GitHubOAuth.h"
 #include "../include/JWT.h"
 #include "../include/SimpleDB.h"
-#include "../include/TaskDB.h"  // НОВЫЙ заголовок
-#include "../include/XTunnelSimple.h"
+#include "../include/TaskDB.h"
+#include "../include/ZeroTierManager.h"
 #include "../include/AutoSessionManager.h"
 
 #include <iostream>
@@ -372,7 +372,8 @@ void runFullTaskFlowServer(int port, JWT& jwt, SimpleDB& user_db, TaskDB& task_d
             {"status", "ok"}, 
             {"service", "task-flow-auth"}, 
             {"timestamp", time(nullptr)},
-            {"version", "3.0-full"}
+            {"version", "3.0-full"},
+            {"network", "zero-tier"}
         }.dump();
     });
     
@@ -382,6 +383,7 @@ void runFullTaskFlowServer(int port, JWT& jwt, SimpleDB& user_db, TaskDB& task_d
             {"service", "task_flow_auth_module"},
             {"version", "3.0-full-task-flow"},
             {"timestamp", time(nullptr)},
+            {"network", "zero-tier-private"},
             {"modules", {"auth", "users", "projects", "tasks", "notifications"}},
             {"endpoints", {
                 {{"method", "GET"}, {"path", "/health"}, {"description", "Health check"}},
@@ -1234,14 +1236,13 @@ void runFullTaskFlowServer(int port, JWT& jwt, SimpleDB& user_db, TaskDB& task_d
             if (data.contains("due_date") && !data["due_date"].is_null()) {
                 string due_date_str = data["due_date"];
                 if (!due_date_str.empty()) {
-             // Используем стандартный C++ парсинг
                     istringstream ss(due_date_str);
                     tm timeinfo = {};
                     ss >> get_time(&timeinfo, "%Y-%m-%d");
                     if (!ss.fail()) {
-                    due_date = mktime(&timeinfo);
+                        due_date = mktime(&timeinfo);
                     } else {
-                    cerr << "Warning: Invalid date format: " << due_date_str << endl;
+                        cerr << "Warning: Invalid date format: " << due_date_str << endl;
                     }
                 }
             }
@@ -2069,6 +2070,7 @@ void runFullTaskFlowServer(int port, JWT& jwt, SimpleDB& user_db, TaskDB& task_d
     cout << "🚀 TASK FLOW AUTH MODULE v4.0" << endl;
     cout << "📡 Full Project & Task Management System" << endl;
     cout << "🌐 Server Port: " << port << endl;
+    cout << "🔒 Network: ZeroTier Private VPN" << endl;
     cout << "================================================" << endl;
     cout << "📋 API Endpoints Overview:" << endl;
     cout << endl;
@@ -2098,13 +2100,15 @@ int main(int argc, char* argv[]) {
     cout << "========================================" << endl;
     cout << "🚀 Task Flow Auth Module v4.0" << endl;
     cout << "📡 Full Project & Task Management" << endl;
+    cout << "🔒 ZeroTier Private Network Integration" << endl;
     cout << "========================================" << endl;
     
     // Parse command line arguments
     bool api_mode = false;
     int api_port = 8081;
-    bool useXtunnel = false;
-    string xtunnelKey = "";
+    bool useZeroTier = false;
+    string ztNetworkId = "";
+    string ztApiToken = "";
     string publicUrl = "";
     
     for (int i = 1; i < argc; i++) {
@@ -2113,17 +2117,21 @@ int main(int argc, char* argv[]) {
             api_mode = true;
         } else if ((arg == "--port" || arg == "-p") && i + 1 < argc) {
             api_port = stoi(argv[++i]);
-        } else if (arg == "--xtunnel" || arg == "-x") {
-            useXtunnel = true;
-        } else if (arg == "--xtunnel-key" && i + 1 < argc) {
-            xtunnelKey = argv[++i];
-            useXtunnel = true;
+        } else if (arg == "--zerotier" || arg == "-z") {
+            useZeroTier = true;
+        } else if (arg == "--zerotier-network" && i + 1 < argc) {
+            ztNetworkId = argv[++i];
+            useZeroTier = true;
+        } else if (arg == "--zerotier-token" && i + 1 < argc) {
+            ztApiToken = argv[++i];
+            useZeroTier = true;
         } else if (arg == "--help" || arg == "-h") {
             cout << "\nUsage:" << endl;
             cout << "  " << argv[0] << "                    - Interactive mode" << endl;
             cout << "  " << argv[0] << " --api             - Start API server" << endl;
             cout << "  " << argv[0] << " --api --port 3000 - Custom port" << endl;
-            cout << "  " << argv[0] << " --api --xtunnel   - With xTunnel" << endl;
+            cout << "  " << argv[0] << " --api --zerotier  - With ZeroTier private network" << endl;
+            cout << "  " << argv[0] << " --api --zerotier --zerotier-network NETWORK_ID" << endl;
             cout << "  " << argv[0] << " --help            - Show help" << endl;
             return 0;
         }
@@ -2133,27 +2141,73 @@ int main(int argc, char* argv[]) {
         // Initialize core components
         Config config("config.json");
         SimpleDB db(config.getDbFile());
-        TaskDB task_db("taskflow_db.json");  // НОВЫЙ объект TaskDB
+        TaskDB task_db("taskflow_db.json");
         
-        // xTunnel integration
-        if (useXtunnel) {
+        // ZeroTier integration
+        if (useZeroTier) {
             cout << "\n========================================" << endl;
-            cout << "🔧 XTUNNEL INTEGRATION" << endl;
+            cout << "🔧 ZEROTIER PRIVATE NETWORK SETUP" << endl;
             cout << "========================================" << endl;
             
-            if (!XTunnelSimple::isAvailable()) {
-                cout << "⚠️  xTunnel not found" << endl;
+            ZeroTierManager zt;
+            
+            // Try to initialize ZeroTier
+            if (!zt.initialize()) {
+                cout << "⚠️  ZeroTier not installed or not running" << endl;
+                cout << "📋 Please install ZeroTier One from: https://www.zerotier.com/download/" << endl;
+                cout << "📋 Or run download_zerotier.ps1 to install automatically" << endl;
                 cout << "📋 Continuing in local-only mode..." << endl;
             } else {
-                cout << "✅ xTunnel found" << endl;
+                cout << "✅ ZeroTier initialized successfully" << endl;
+                cout << "🔧 Node ID: " << zt.getNodeID() << endl;
                 
-                if (XTunnelSimple::startTunnel(api_port, xtunnelKey)) {
-                    publicUrl = XTunnelSimple::getTunnelUrl();
+                // Read network ID from file if not provided via command line
+                if (ztNetworkId.empty()) {
+                    ifstream network_file("zerotier_network_id.txt");
+                    if (network_file) {
+                        getline(network_file, ztNetworkId);
+                        network_file.close();
+                        cout << "📋 Read network ID from file: " << ztNetworkId << endl;
+                    }
+                }
+                
+                if (ztNetworkId.empty()) {
+                    cout << "⚠️  No ZeroTier network ID provided" << endl;
+                    cout << "📋 To create a network:" << endl;
+                    cout << "   1. Go to https://my.zerotier.com" << endl;
+                    cout << "   2. Create a new network" << endl;
+                    cout << "   3. Save the 16-character Network ID to 'zerotier_network_id.txt'" << endl;
+                    cout << "   4. Run with: --zerotier-network NETWORK_ID" << endl;
+                    cout << "📋 Using local-only mode for now..." << endl;
+                } else {
+                    cout << "🔗 Joining ZeroTier network: " << ztNetworkId << endl;
+                    cout << "⏳ This may take up to 30 seconds..." << endl;
                     
-                    if (!publicUrl.empty()) {
-                        cout << "\n🌐 PUBLIC URL: " << publicUrl << endl;
-                        cout << "📋 Share with your team:" << endl;
-                        cout << "   API: " << publicUrl << "/api/..." << endl;
+                    if (zt.joinNetwork(ztNetworkId)) {
+                        vector<string> ips = zt.getLocalIPs();
+                        if (!ips.empty()) {
+                            publicUrl = "http://" + ips[0] + ":" + to_string(api_port);
+                            
+                            cout << "\n========================================" << endl;
+                            cout << "🌐 ZEROTIER PRIVATE NETWORK READY" << endl;
+                            cout << "========================================" << endl;
+                            cout << "📡 Your server IP: " << ips[0] << endl;
+                            cout << "🔗 Internal URL: " << publicUrl << endl;
+                            cout << "🔧 Network ID: " << ztNetworkId << endl;
+                            cout << "📋 Share this with your team members:" << endl;
+                            cout << endl;
+                            cout << "FOR TEAM MEMBERS TO CONNECT:" << endl;
+                            cout << "1. Install ZeroTier One from https://www.zerotier.com/download/" << endl;
+                            cout << "2. Join the network: zerotier-cli join " << ztNetworkId << endl;
+                            cout << "3. Tell me your Node ID (from: zerotier-cli info)" << endl;
+                            cout << "4. I'll authorize you in ZeroTier control panel" << endl;
+                            cout << "5. Once authorized, access: " << publicUrl << endl;
+                            cout << "========================================\n" << endl;
+                        }
+                    } else {
+                        cout << "❌ Failed to join ZeroTier network" << endl;
+                        cout << "📋 Check network ID and authorization" << endl;
+                        cout << "📋 Continuing in local-only mode..." << endl;
                     }
                 }
             }
@@ -2162,11 +2216,11 @@ int main(int argc, char* argv[]) {
         
         // Set GitHub redirect URI
         string githubRedirectUri;
-        if (!publicUrl.empty() && publicUrl.find("https://") == 0) {
+        if (!publicUrl.empty() && publicUrl.find("http://") == 0) {
             githubRedirectUri = publicUrl + "/api/auth/callback";
         } else {
             githubRedirectUri = config.getGithubRedirectUri();
-            if (githubRedirectUri.find("/callback") == string::npos) {
+            if (githubRedirectUri == "auto" || githubRedirectUri.find("/callback") == string::npos) {
                 githubRedirectUri = "http://localhost:" + to_string(api_port) + "/api/auth/callback";
             }
         }
@@ -2188,9 +2242,9 @@ int main(int argc, char* argv[]) {
         cout << "  • API Port: " << api_port << endl;
         cout << "  • User DB: " << config.getDbFile() << " (" << db.getAllUsers().size() << " users)" << endl;
         cout << "  • Task DB: taskflow_db.json" << endl;
-        cout << "  • xTunnel: " << (useXtunnel ? "ENABLED" : "DISABLED") << endl;
+        cout << "  • ZeroTier: " << (useZeroTier ? "ENABLED" : "DISABLED") << endl;
         if (!publicUrl.empty()) {
-            cout << "  • Public URL: " << publicUrl << endl;
+            cout << "  • Private URL: " << publicUrl << endl;
         }
         cout << "========================================\n" << endl;
         
@@ -2201,6 +2255,7 @@ int main(int argc, char* argv[]) {
             // Interactive mode (упрощенный для Task Flow)
             cout << "\n=== Task Flow Interactive Mode ===" << endl;
             cout << "Type 'api-start' to launch full API server" << endl;
+            cout << "Type 'zerotier-setup' for ZeroTier configuration" << endl;
             cout << "Type 'exit' to quit" << endl;
             cout << "=================================\n" << endl;
             
@@ -2216,6 +2271,14 @@ int main(int argc, char* argv[]) {
                     runFullTaskFlowServer(api_port, jwt, db, task_db, github);
                     break;
                 }
+                else if (command == "zerotier-setup") {
+                    cout << "\n=== ZeroTier Setup ===" << endl;
+                    cout << "1. Install ZeroTier from https://www.zerotier.com/download/" << endl;
+                    cout << "2. Create network at https://my.zerotier.com" << endl;
+                    cout << "3. Save Network ID to 'zerotier_network_id.txt'" << endl;
+                    cout << "4. Restart with: auth_module.exe --api --zerotier" << endl;
+                    cout << "=====================\n" << endl;
+                }
                 else if (command == "exit" || command == "quit") {
                     cout << "👋 Goodbye!" << endl;
                     break;
@@ -2228,23 +2291,18 @@ int main(int argc, char* argv[]) {
                     cout << "=========================\n" << endl;
                 }
                 else if (!command.empty()) {
-                    cout << "Type 'api-start' to launch server or 'exit' to quit" << endl;
+                    cout << "Available commands:" << endl;
+                    cout << "  api-start       - Launch API server" << endl;
+                    cout << "  zerotier-setup  - Configure ZeroTier" << endl;
+                    cout << "  stats           - Show database statistics" << endl;
+                    cout << "  exit            - Quit program" << endl;
                 }
             }
         }
         
     } catch (const exception& e) {
         cerr << "❌ Critical Error: " << e.what() << endl;
-        
-        if (useXtunnel) {
-            XTunnelSimple::stopTunnel();
-        }
-        
         return 1;
-    }
-    
-    if (useXtunnel) {
-        XTunnelSimple::stopTunnel();
     }
     
     return 0;

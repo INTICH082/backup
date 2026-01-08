@@ -1,51 +1,84 @@
-#ifdef _WIN32
-#undef byte
-#define _NO_BYTE
-#endif
-
 #include "../include/Config.h"
-#include <iostream>
 #include "../include/precompiled.h"
+#include <fstream>
+#include <sstream>
 
-Config::Config(const string& config_file) {
+Config::Config(const string& filename) : config_file(filename) {
+    loadConfig();
+}
+
+void Config::loadConfig() {
     ifstream file(config_file);
-    if (!file.is_open()) {
-        cerr << "Error: Could not open config file " << config_file << endl;
-        exit(1);
+    if (file.is_open()) {
+        try {
+            stringstream buffer;
+            buffer << file.rdbuf();
+            string json_str = buffer.str();
+            
+            if (!json_str.empty()) {
+                data = json::parse(json_str);
+            } else {
+                data = json::object();
+            }
+        } catch (...) {
+            data = json::object();
+        }
+        file.close();
+    } else {
+        data = json::object();
+        saveConfig();
     }
-    
-    try {
-        file >> config;
-    } catch (const json::parse_error& e) {
-        cerr << "Error parsing config file: " << e.what() << endl;
-        exit(1);
+}
+
+void Config::saveConfig() {
+    ofstream file(config_file);
+    if (file.is_open()) {
+        file << data.dump(4);
+        file.close();
     }
 }
 
-string Config::getGithubClientId() const {
-    return config["github"]["client_id"];
+string Config::getString(const string& key, const string& default_value) {
+    if (data.contains(key)) {
+        return data[key].get<string>();
+    }
+    return default_value;
 }
 
-string Config::getGithubClientSecret() const {
-    return config["github"]["client_secret"];
+int Config::getInt(const string& key, int default_value) {
+    if (data.contains(key)) {
+        return data[key].get<int>();
+    }
+    return default_value;
 }
 
-string Config::getGithubRedirectUri() const {
-    return config["github"]["redirect_uri"];
+bool Config::getBool(const string& key, bool default_value) {
+    if (data.contains(key)) {
+        return data[key].get<bool>();
+    }
+    return default_value;
 }
 
-string Config::getJwtSecret() const {
-    return config["server"]["jwt_secret"];
+string Config::getDbFile() {
+    return getString("db_file", "users.json");
 }
 
-int Config::getJwtExpiryHours() const {
-    return config["server"]["jwt_expiry_hours"];
+string Config::getJwtSecret() {
+    return getString("jwt_secret", "your-secret-key-change-this");
 }
 
-int Config::getServerPort() const {
-    return config["server"]["port"];
+int Config::getJwtExpiryHours() {
+    return getInt("jwt_expiry_hours", 24);
 }
 
-string Config::getDbFile() const {
-    return config["database"]["file"];
+string Config::getGithubClientId() {
+    return getString("github_client_id", "");
+}
+
+string Config::getGithubClientSecret() {
+    return getString("github_client_secret", "");
+}
+
+string Config::getGithubRedirectUri() {
+    return getString("github_redirect_uri", "auto");
 }

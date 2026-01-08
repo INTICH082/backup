@@ -1,33 +1,35 @@
-// win_clean.h
+// win_clean.h - Windows-specific cleanup utilities
+
 #ifndef WIN_CLEAN_H
 #define WIN_CLEAN_H
 
 #ifdef _WIN32
-
-// Блокируем стандартные определения перед включением
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-
-// Сохраняем состояние
-#ifdef byte
-#pragma message("Warning: byte is already defined before including Windows headers")
-#undef byte
-#endif
-
-// Включаем минимальные Windows заголовки
+#include <windows.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
-#include <windows.h>
 
-// Очищаем после инклюдов если что-то осталось
-#ifdef byte
-#undef byte
-#endif
+// Function to clean up Windows sockets and resources
+inline void win_cleanup() {
+    WSACleanup();
+}
+
+// Function to close socket with Windows-specific function
+inline void close_socket(SOCKET sock) {
+    closesocket(sock);
+}
+
+#else
+// Unix/Linux compatible stubs
+#include <unistd.h>
+#include <sys/socket.h>
+
+inline void win_cleanup() {
+    // Nothing to clean up on Unix
+}
+
+inline void close_socket(int sock) {
+    close(sock);
+}
 
 #endif // _WIN32
 

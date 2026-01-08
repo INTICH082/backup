@@ -2,33 +2,32 @@
 #define CONFIG_H
 
 #include <string>
-#include <fstream>
-#include "json.hpp"
+#include "json.hpp"  
 
 using namespace std;
-using json = nlohmann::json;
 
 class Config {
 private:
-    json config;
+    string config_file;
+    nlohmann::json data;  // Используем полное имя
+    
+    void loadConfig();
+    void saveConfig();
     
 public:
-    Config(const string& config_file = "config.json");
+    Config(const string& config_file);
     
-    // GitHub OAuth config
-    string getGithubClientId() const;
-    string getGithubClientSecret() const;
-    string getGithubRedirectUri() const;
+    string getString(const string& key, const string& default_value = "");
+    int getInt(const string& key, int default_value = 0);
+    bool getBool(const string& key, bool default_value = false);
     
-    // JWT config
-    string getJwtSecret() const;
-    int getJwtExpiryHours() const;
-    
-    // Server config
-    int getServerPort() const;
-    
-    // Database config
-    string getDbFile() const;
+    // Геттеры для конкретных настроек
+    string getDbFile();
+    string getJwtSecret();
+    int getJwtExpiryHours();
+    string getGithubClientId();
+    string getGithubClientSecret();
+    string getGithubRedirectUri();
 };
 
-#endif
+#endif // CONFIG_H
