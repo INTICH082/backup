@@ -1,45 +1,366 @@
 ### Health Check
-GET https://70c3aab4-a0e6-4543-a7b3-b85d4f7e3c7c.tunnel4.com/health
+GET https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/health
 
 ### Discovery
-GET https://70c3aab4-a0e6-4543-a7b3-b85d4f7e3c7c.tunnel4.com/api/discovery
+GET https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/discovery
 
-### Register User
-POST https://70c3aab4-a0e6-4543-a7b3-b85d4f7e3c7c.tunnel4.com/api/users/register
+### ========== USER MANAGEMENT ==========
+
+### Register User (Student)
+POST https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/users/register
 Content-Type: application/json
 
 {
-  "username": "testuser",
-  "email": "test@example.com",
-  "password": "password123",
-  "full_name": "Test User",
-  "course": "1",
-  "role": "student"
+    "username": "student_user",
+    "email": "student@example.com",
+    "password": "password123",
+    "full_name": "Student User",
+    "course": "1",
+    "role": "student"
 }
 
-### Login
-POST https://70c3aab4-a0e6-4543-a7b3-b85d4f7e3c7c.tunnel4.com/api/users/login
+### Register User (Teacher)
+POST https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/users/register
 Content-Type: application/json
 
 {
-  "username": "testuser",
-  "password": "password123"
+    "username": "teacher_user",
+    "email": "teacher@example.com",
+    "password": "teacherpass",
+    "full_name": "Teacher User",
+    "course": "1",
+    "role": "teacher"
 }
 
-### Get Current User
-GET https://70c3aab4-a0e6-4543-a7b3-b85d4f7e3c7c.tunnel4.com/api/users/me
-Authorization: Bearer YOUR_JWT_TOKEN
+### Register User (Admin)
+POST https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/users/register
+Content-Type: application/json
+
+{
+    "username": "admin_user",
+    "email": "admin@example.com",
+    "password": "adminpass123",
+    "full_name": "Admin User",
+    "course": "1",
+    "role": "admin"
+}
+
+### Login (Student)
+POST https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/users/login
+Content-Type: application/json
+
+{
+    "username": "student_user",
+    "password": "password123"
+}
+
+### Login (Teacher)
+POST https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/users/login
+Content-Type: application/json
+
+{
+    "username": "teacher_user",
+    "password": "teacherpass"
+}
+
+### Login (Admin)
+POST https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/users/login
+Content-Type: application/json
+
+{
+    "username": "admin_user",
+    "password": "adminpass123"
+}
+
+### Get Current User (Replace YOUR_TOKEN with actual JWT token)
+GET https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/users/me
+Authorization: Bearer vSNRCESijiOb7mAsnwaTkkoJ8rMJNAGnWSF5XynV
+
+### Get All Users (Admin only)
+GET https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/users/list
+Authorization: Bearer iplaygodotandclaimfun
+
+### Get User by ID
+GET https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/users/1
+Authorization: Bearer YOUR_TOKEN_HERE
+
+### Update User Profile
+PUT https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/users/me
+Authorization: Bearer YOUR_TOKEN_HERE
+Content-Type: application/json
+
+{
+    "full_name": "Updated Name",
+    "email": "updated@example.com",
+    "course": "2"
+}
+
+### Change Password
+PUT https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/users/change-password
+Authorization: Bearer vSNRCESijiOb7mAsnwaTkkoJ8rMJNAGnWSF5XynV
+Content-Type: application/json
+
+{
+    "old_password": "password123",
+    "new_password": "newpassword456"
+}
+
+### Delete User
+DELETE https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/users/me
+Authorization: Bearer YOUR_TOKEN_HERE
+
+### ========== COURSE MANAGEMENT ==========
+
+### Get All Courses
+GET https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/courses
+Authorization: Bearer YOUR_TOKEN_HERE
+
+### Get Course by ID
+GET https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/courses/1
+Authorization: Bearer YOUR_TOKEN_HERE
+
+### Create New Course (Teacher/Admin only)
+POST https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/courses
+Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
+Content-Type: application/json
+
+{
+    "name": "Advanced Mathematics",
+    "description": "Advanced course covering calculus and linear algebra",
+    "code": "MATH201",
+    "credits": 4
+}
+
+### Update Course
+PUT https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/courses/1
+Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
+Content-Type: application/json
+
+{
+    "name": "Updated Course Name",
+    "description": "Updated description",
+    "code": "UPDATED101"
+}
+
+### Delete Course
+DELETE https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/courses/1
+Authorization: Bearer YOUR_ADMIN_TOKEN_HERE
+
+### ========== AUTHENTICATION & TOKENS ==========
 
 ### Validate Token
-POST https://70c3aab4-a0e6-4543-a7b3-b85d4f7e3c7c.tunnel4.com/api/auth/validate
-Authorization: Bearer YOUR_JWT_TOKEN
+POST https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/auth/validate
+Authorization: Bearer YOUR_TOKEN_HERE
 
-### GitHub Auth Init
-POST https://70c3aab4-a0e6-4543-a7b3-b85d4f7e3c7c.tunnel4.com/api/auth/init
+### Refresh Token
+POST https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/auth/refresh
+Content-Type: application/json
 
-### Check Auth Status
-GET https://70c3aab4-a0e6-4543-a7b3-b85d4f7e3c7c.tunnel4.com/api/auth/status?token=YOUR_LOGIN_TOKEN
+{
+    "refresh_token": "YOUR_REFRESH_TOKEN_HERE"
+}
 
-### List Users (Admin only)
-GET https://70c3aab4-a0e6-4543-a7b3-b85d4f7e3c7c.tunnel4.com/api/users/list
-Authorization: Bearer ADMIN_JWT_TOKEN
+### Logout
+POST https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/auth/logout
+Authorization: Bearer YOUR_TOKEN_HERE
+
+### ========== ASSIGNMENTS/TASKS ==========
+
+### Get Assignments for Course
+GET https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/courses/1/assignments
+Authorization: Bearer YOUR_TOKEN_HERE
+
+### Create Assignment
+POST https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/assignments
+Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
+Content-Type: application/json
+
+{
+    "title": "Homework 1",
+    "description": "Complete exercises 1-10",
+    "course_id": 1,
+    "due_date": "2024-12-31T23:59:59Z",
+    "max_score": 100
+}
+
+### Submit Assignment
+POST https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/assignments/1/submit
+Authorization: Bearer YOUR_TOKEN_HERE
+Content-Type: application/json
+
+{
+    "content": "My assignment solution",
+    "attachments": ["file1.pdf", "file2.zip"]
+}
+
+### ========== GRADES ==========
+
+### Get My Grades
+GET https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/grades/me
+Authorization: Bearer YOUR_TOKEN_HERE
+
+### Get Grades for Course
+GET https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/courses/1/grades
+Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
+
+### Submit Grade
+POST https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/grades
+Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
+Content-Type: application/json
+
+{
+    "student_id": 1,
+    "assignment_id": 1,
+    "score": 95,
+    "feedback": "Excellent work!"
+}
+
+### ========== ATTENDANCE ==========
+
+### Mark Attendance
+POST https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/attendance
+Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
+Content-Type: application/json
+
+{
+    "course_id": 1,
+    "student_id": 1,
+    "date": "2024-01-08",
+    "status": "present"
+}
+
+### Get Attendance Report
+GET https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/courses/1/attendance?start_date=2024-01-01&end_date=2024-01-31
+Authorization: Bearer YOUR_TOKEN_HERE
+
+### ========== ANNOUNCEMENTS ==========
+
+### Get Announcements
+GET https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/announcements
+Authorization: Bearer YOUR_TOKEN_HERE
+
+### Create Announcement
+POST https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/announcements
+Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
+Content-Type: application/json
+
+{
+    "title": "Important Update",
+    "content": "Class canceled on Friday",
+    "course_id": 1,
+    "priority": "high"
+}
+
+### ========== FILE UPLOAD ==========
+
+### Upload File
+POST https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/files/upload
+Authorization: Bearer YOUR_TOKEN_HERE
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="file"; filename="document.pdf"
+Content-Type: application/pdf
+
+< ./path/to/your/file.pdf
+--boundary123
+Content-Disposition: form-data; name="description"
+
+Course material for week 1
+--boundary123
+Content-Disposition: form-data; name="course_id"
+
+1
+--boundary123--
+
+### ========== ERROR TESTING ==========
+
+### Test Invalid Login (Wrong Password)
+POST https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/users/login
+Content-Type: application/json
+
+{
+    "username": "student_user",
+    "password": "wrongpassword"
+}
+
+### Test Invalid Token
+GET https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/users/me
+Authorization: Bearer INVALID_TOKEN_123
+
+### Test Missing Required Field
+POST https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/users/register
+Content-Type: application/json
+
+{
+    "username": "incomplete_user",
+    "email": "incomplete@example.com"
+    // Missing password and other required fields
+}
+
+### Test Unauthorized Access (Student trying to create course)
+POST https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/courses
+Authorization: Bearer YOUR_STUDENT_TOKEN_HERE
+Content-Type: application/json
+
+{
+    "name": "Unauthorized Course",
+    "description": "This should fail"
+}
+
+### Test Rate Limiting (Multiple rapid requests)
+# Send this request multiple times quickly
+GET https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/health
+
+### Test Invalid JSON
+POST https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/users/login
+Content-Type: application/json
+
+{
+    "username": "test",
+    "password": "test"
+    // Missing closing brace intentionally
+
+### ========== ADDITIONAL TESTS ==========
+
+### Search Users
+GET https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/users/search?query=student
+Authorization: Bearer YOUR_TOKEN_HERE
+
+### Get Course Students
+GET https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/courses/1/students
+Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
+
+### Enroll in Course
+POST https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/courses/1/enroll
+Authorization: Bearer YOUR_TOKEN_HERE
+
+### Get My Courses
+GET https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/users/me/courses
+Authorization: Bearer YOUR_TOKEN_HERE
+
+### Reset Password Request
+POST https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/users/forgot-password
+Content-Type: application/json
+
+{
+    "email": "student@example.com"
+}
+
+### Verify Email
+POST https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/api/users/verify-email
+Content-Type: application/json
+
+{
+    "token": "VERIFICATION_TOKEN_HERE"
+}
+
+### Test CORS Preflight
+OPTIONS https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/health
+Origin: http://localhost:3000
+Access-Control-Request-Method: GET
+Access-Control-Request-Headers: Content-Type
+
+### Test CORS with Origin
+GET https://bfb8069b-86ff-49df-9bfb-6a0b3f14717a.tunnel4.com/health
+Origin: http://localhost:8080
