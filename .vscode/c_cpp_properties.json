@@ -2,16 +2,28 @@
     "configurations": [
         {
             "name": "Win32",
+            "includePath": [
+                "${workspaceFolder}/authorization/include",
+                "C:/msys64/ucrt64/include",
+                "C:/msys64/ucrt64/include/c++/15.2.0",
+                "C:/msys64/ucrt64/include/c++/15.2.0/x86_64-w64-mingw32"
+            ],
             "defines": [
                 "_DEBUG",
                 "UNICODE",
-                "_UNICODE"
+                "_UNICODE",
+                "_NO_BYTE",
+                "byte=win_byte"
             ],
-            "windowsSdkVersion": "10.0.26100.0",
+            "windowsSdkVersion": "10.0.19041.0",
             "compilerPath": "C:/msys64/ucrt64/bin/g++.exe",
             "cStandard": "c17",
             "cppStandard": "c++17",
-            "intellisenseMode": "windows-gcc-x64"  // ИЗМЕНЕНО С windows-msvc-x64
+            "intelliSenseMode": "windows-gcc-x64",
+            "compilerArgs": [
+                "-D_NO_BYTE",
+                "-Dbyte=win_byte"
+            ]
         }
     ],
     "version": 4
