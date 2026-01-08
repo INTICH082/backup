@@ -6,6 +6,7 @@
 #include <cstring>
 #include <iomanip>
 #include <cctype>
+#include <algorithm>
 #include "../include/precompiled.h"
 
 using namespace std;
@@ -57,7 +58,9 @@ string JWT::base64_encode(const unsigned char* input, size_t length) {
 }
 
 string JWT::base64_decode(const string& input) {
-    if (input.empty()) return "";
+    if (input.empty()) {
+        return "";
+    }
     
     string modified = input;
     
@@ -71,7 +74,8 @@ string JWT::base64_decode(const string& input) {
     int i = 0;
     int j = 0;
     int in_ = 0;
-    unsigned char char_array_4[4], char_array_3[3];
+    unsigned char char_array_4[4] = {0};
+    unsigned char char_array_3[3] = {0};
     string ret;
     
     while (in_len-- && in_ < modified.size()) {
@@ -89,19 +93,25 @@ string JWT::base64_decode(const string& input) {
             if (i == 4) {
                 // Декодируем 4 символа в 3 байта
                 for (i = 0; i < 4; i++) {
-                    char_array_4[i] = static_cast<unsigned char>(base64_chars.find(char_array_4[i]));
-                    if (char_array_4[i] == 255) {
-                        // Недопустимый символ
-                        return "";
+                    if (char_array_4[i] == '=') {
+                        char_array_4[i] = 0;
+                    } else {
+                        size_t pos = base64_chars.find(char_array_4[i]);
+                        if (pos == string::npos) {
+                            // Недопустимый символ
+                            return "";
+                        }
+                        char_array_4[i] = static_cast<unsigned char>(pos);
                     }
                 }
                 
                 char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
-                char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
-                char_array_3[2] = ((char_array_4[2] & 0x3) << 6) + char_array_4[3];
+                char_array_3[1] = ((char_array_4[1] & 0x0f) << 4) + ((char_array_4[2] & 0x3c) >> 2);
+                char_array_3[2] = ((char_array_4[2] & 0x03) << 6) + char_array_4[3];
                 
-                for (i = 0; i < 3; i++)
+                for (i = 0; i < 3; i++) {
                     ret += char_array_3[i];
+                }
                 i = 0;
             }
         } else {
@@ -111,24 +121,26 @@ string JWT::base64_decode(const string& input) {
     }
     
     // Обработка оставшихся символов
-    if (i) {
-        for (j = i; j < 4; j++)
+    if (i > 0) {
+        for (j = i; j < 4; j++) {
             char_array_4[j] = 0;
+        }
         
         for (j = 0; j < 4; j++) {
-            if (char_array_4[j] != '=') {
-                char_array_4[j] = static_cast<unsigned char>(base64_chars.find(char_array_4[j]));
-                if (char_array_4[j] == 255) {
+            if (char_array_4[j] == '=') {
+                char_array_4[j] = 0;
+            } else if (char_array_4[j] != 0) {
+                size_t pos = base64_chars.find(char_array_4[j]);
+                if (pos == string::npos) {
                     return "";
                 }
-            } else {
-                char_array_4[j] = 0;
+                char_array_4[j] = static_cast<unsigned char>(pos);
             }
         }
         
         char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
-        char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
-        char_array_3[2] = ((char_array_4[2] & 0x3) << 6) + char_array_4[3];
+        char_array_3[1] = ((char_array_4[1] & 0x0f) << 4) + ((char_array_4[2] & 0x3c) >> 2);
+        char_array_3[2] = ((char_array_4[2] & 0x03) << 6) + char_array_4[3];
         
         for (j = 0; j < i - 1; j++) {
             ret += char_array_3[j];
@@ -150,49 +162,86 @@ string JWT::sign(const string& data) {
         return "";
     }
     
-    unsigned char digest[32];
-    unsigned int digest_len;
+    cout << "[JWT] Signing data of length: " << data.length() << endl;
+    
+    unsigned char digest[EVP_MAX_MD_SIZE];
+    unsigned int digest_len = 0;
     
     HMAC(EVP_sha256(), 
          secret_key.c_str(), static_cast<int>(secret_key.length()),
          reinterpret_cast<const unsigned char*>(data.c_str()), static_cast<int>(data.length()),
          digest, &digest_len);
     
-    if (digest_len != 32) {
-        cerr << "[JWT] HMAC signature length mismatch: " << digest_len << endl;
+    if (digest_len == 0) {
+        cerr << "[JWT] HMAC failed to produce signature" << endl;
         return "";
     }
     
-    return base64_encode(digest, digest_len);
+    cout << "[JWT] Generated signature of length: " << digest_len << " bytes" << endl;
+    
+    string signature_b64 = base64_encode(digest, digest_len);
+    
+    // JWT требует URL-safe Base64 без pad символов
+    for (char& c : signature_b64) {
+        if (c == '+') c = '-';
+        if (c == '/') c = '_';
+    }
+    
+    // Удаляем pad символы
+    while (!signature_b64.empty() && signature_b64.back() == '=') {
+        signature_b64.pop_back();
+    }
+    
+    cout << "[JWT] Final signature B64: " << signature_b64 << endl;
+    
+    return signature_b64;
 }
 
 bool JWT::verify(const string& token, const string& signature) {
     if (token.empty() || signature.empty()) {
+        cout << "[JWT] Cannot verify empty token or signature" << endl;
         return false;
     }
     
     string expected = sign(token);
     if (expected.empty()) {
+        cout << "[JWT] Failed to generate signature for verification" << endl;
         return false;
     }
     
-    // Сравнение без учета pad символов (=)
-    string expected_clean = expected;
-    string signature_clean = signature;
+    // Декодируем обе сигнатуры для сравнения
+    string expected_decoded = base64_decode(expected);
+    string signature_decoded = base64_decode(signature);
     
-    while (!expected_clean.empty() && expected_clean.back() == '=') {
-        expected_clean.pop_back();
-    }
-    while (!signature_clean.empty() && signature_clean.back() == '=') {
-        signature_clean.pop_back();
+    if (expected_decoded.empty() || signature_decoded.empty()) {
+        cout << "[JWT] Failed to decode signatures for comparison" << endl;
+        cout << "[JWT] Expected B64: " << expected << endl;
+        cout << "[JWT] Signature B64: " << signature << endl;
+        return false;
     }
     
-    bool result = (expected_clean == signature_clean);
+    // Сравнение raw байтов
+    bool result = (expected_decoded == signature_decoded);
     
     if (!result) {
         cout << "[JWT] Signature verification failed" << endl;
-        cout << "[JWT] Expected: " << expected_clean << endl;
-        cout << "[JWT] Got: " << signature_clean << endl;
+        cout << "[JWT] Expected length: " << expected_decoded.length() << endl;
+        cout << "[JWT] Got length: " << signature_decoded.length() << endl;
+        
+        // Логирование для отладки (первые 16 байт)
+        cout << "[JWT] Expected (first 16 bytes): ";
+        for (size_t i = 0; i < min((size_t)16, expected_decoded.length()); i++) {
+            printf("%02x ", (unsigned char)expected_decoded[i]);
+        }
+        cout << endl;
+        
+        cout << "[JWT] Got (first 16 bytes): ";
+        for (size_t i = 0; i < min((size_t)16, signature_decoded.length()); i++) {
+            printf("%02x ", (unsigned char)signature_decoded[i]);
+        }
+        cout << endl;
+    } else {
+        cout << "[JWT] Signature verification successful" << endl;
     }
     
     return result;
@@ -246,25 +295,25 @@ string JWT::generateToken(const map<string, string>& payload) {
     
     // Signature
     string data = header_b64 + "." + payload_b64;
-    string signature = sign(data);
+    cout << "[JWT] Data to sign: " << data << endl;
     
-    // Заменяем стандартные Base64 символы на URL-safe для JWT
-    for (char& c : signature) {
-        if (c == '+') c = '-';
-        if (c == '/') c = '_';
-    }
-    // Удаляем pad символы (=) для JWT
-    while (!signature.empty() && signature.back() == '=') {
-        signature.pop_back();
+    string signature = sign(data);
+    if (signature.empty()) {
+        cerr << "[JWT] Failed to generate signature for token" << endl;
+        return "";
     }
     
     string token = data + "." + signature;
     
     cout << "[JWT] Generated token with expiry: " << expiry_hours << " hours" << endl;
+    cout << "[JWT] Token: " << token << endl;
+    
     return token;
 }
 
 map<string, string> JWT::validateToken(const string& token) {
+    cout << "[JWT] Validating token: " << (token.length() > 50 ? token.substr(0, 50) + "..." : token) << endl;
+    
     if (token.empty()) {
         cout << "[JWT] Empty token provided" << endl;
         return {};
@@ -276,6 +325,7 @@ map<string, string> JWT::validateToken(const string& token) {
     
     if (dot1 == string::npos || dot2 == string::npos || token.find('.', dot2 + 1) != string::npos) {
         cout << "[JWT] Invalid token format (expected header.payload.signature)" << endl;
+        cout << "[JWT] dot1: " << dot1 << ", dot2: " << dot2 << endl;
         return {};
     }
     
@@ -283,27 +333,40 @@ map<string, string> JWT::validateToken(const string& token) {
     string payload_b64 = token.substr(dot1 + 1, dot2 - dot1 - 1);
     string signature_b64 = token.substr(dot2 + 1);
     
+    cout << "[JWT] Header B64: " << header_b64 << endl;
+    cout << "[JWT] Payload B64: " << payload_b64 << endl;
+    cout << "[JWT] Signature B64: " << signature_b64 << endl;
+    
     // Проверка подписи
     string data = header_b64 + "." + payload_b64;
+    cout << "[JWT] Data to verify: " << data << endl;
     
     // Декодируем сигнатуру для проверки
     string decoded_signature = base64_decode(signature_b64);
     if (decoded_signature.empty()) {
         cout << "[JWT] Failed to decode signature" << endl;
+        cout << "[JWT] Signature B64 that failed: " << signature_b64 << endl;
         return {};
     }
+    
+    cout << "[JWT] Decoded signature length: " << decoded_signature.length() << " bytes" << endl;
     
     if (!verify(data, decoded_signature)) {
         cout << "[JWT] Token signature verification failed" << endl;
         return {};
     }
     
+    cout << "[JWT] Signature verification successful" << endl;
+    
     // Декодирование payload
     string payload_str = base64_decode(payload_b64);
     if (payload_str.empty()) {
         cout << "[JWT] Failed to decode payload" << endl;
+        cout << "[JWT] Payload B64 that failed: " << payload_b64 << endl;
         return {};
     }
+    
+    cout << "[JWT] Decoded payload: " << payload_str << endl;
     
     json payload_json;
     try {
@@ -338,6 +401,8 @@ map<string, string> JWT::validateToken(const string& token) {
         cout << "[JWT] Token expired at " << exp << ", now is " << now << endl;
         return {};
     }
+    
+    cout << "[JWT] Token expiry check passed. Exp: " << exp << ", Now: " << now << endl;
     
     // Преобразование claims в map
     map<string, string> claims;

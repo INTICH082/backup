@@ -1,26 +1,26 @@
 ### Health Check
-GET https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/health
+GET https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/health
 
 ### Discovery
-GET https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/discovery
+GET https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/discovery
 
 ### ========== USER MANAGEMENT ==========
 
 ### Register User (Student)
-POST https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/users/register
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/users/register
 Content-Type: application/json
 
 {
-    "username": "аауцent",
-    "email": "sst@example.com",
-    "password": "teуs56",
-    "full_name": "Сыяди",
-    "course": "2",
+    "username": "test_student",
+    "email": "student.test@example.com",
+    "password": "student123",
+    "full_name": "Test Student",
+    "course": "3",
     "role": "student"
 }
 
 ### Register User (Teacher)
-POST https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/users/register
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/users/register
 Content-Type: application/json
 
 {
@@ -33,7 +33,7 @@ Content-Type: application/json
 }
 
 ### Register User (Admin)
-POST https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/users/register
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/users/register
 Content-Type: application/json
 
 {
@@ -46,16 +46,16 @@ Content-Type: application/json
 }
 
 ### Login (Student)
-POST https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/users/login
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/users/login
 Content-Type: application/json
 
 {
-    "username": "аауцent",
-    "password": "teуs56"
+    "username": "test_student",
+    "password": "student123"
 }
 
 ### Login (Teacher)
-POST https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/users/login
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/users/login
 Content-Type: application/json
 
 {
@@ -64,7 +64,7 @@ Content-Type: application/json
 }
 
 ### Login (Admin)
-POST https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/users/login
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/users/login
 Content-Type: application/json
 
 {
@@ -73,17 +73,68 @@ Content-Type: application/json
 }
 
 ### Get Current User (Use token from login response)
-GET https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/users/me
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjb3Vyc2UiOiIyIiwiZW1haWwiOiJzc3RAZXhhbXBsZS5jb20iLCJleHAiOjE3Njc5MjI5NDAsImZ1bGxuYW1lIjoi0KHRi9GP0LTQuCIsInJvbGUiOiJzdHVkZW50IiwidXNlcl9pZCI6ImMzMjcxNWJmMThmODQwYmU0YjU1OWJmZiIsInVzZXJuYW1lIjoi0LDQsNGD0YZlbnQifQ==.5oYfOpYFApGgDsaP44Uo8M7+Jhh4nmTgo2f9FVmmAE0=
+GET https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/users/me
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjb3Vyc2UiOiIzIiwiZW1haWwiOiJzdHVkZW50LnRlc3RAZXhhbXBsZS5jb20iLCJleHAiOjE3Njc5MjQ4OTYsImZ1bGxuYW1lIjoiVGVzdCBTdHVkZW50IiwiaWF0IjoxNzY3ODM4NDk2LCJyb2xlIjoic3R1ZGVudCIsInVzZXJfaWQiOiJhYThjZjI4OGEyMjliM2E0YzMxYTA4YmIiLCJ1c2VybmFtZSI6InRlc3Rfc3R1ZGVudCJ9.Kzmms-_jAq_s6uw9t6znMyeKxVyUe73CFox9ZRrG0-Q
 
 ### Get All Users (Admin only - use admin token)
-GET https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/users/list
+GET https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/users/list
 Authorization: Bearer YOUR_ADMIN_TOKEN_HERE
+
+### Update Current User Profile
+PUT https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/users/me
+Authorization: Bearer YOUR_TOKEN_HERE
+Content-Type: application/json
+
+{
+    "full_name": "Updated Name",
+    "course": "4"
+}
+
+### Change Password
+PUT https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/users/me/password
+Authorization: Bearer YOUR_TOKEN_HERE
+Content-Type: application/json
+
+{
+    "current_password": "student123",
+    "new_password": "student456"
+}
+
+### ========== AUTHENTICATION ==========
+
+### GitHub Auth Init
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/auth/init
+Content-Type: application/json
+
+{}
+
+### Validate Token
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/auth/validate
+Authorization: Bearer YOUR_TOKEN_HERE
+Content-Type: application/json
+
+{}
+
+### Refresh Token
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/auth/refresh
+Content-Type: application/json
+
+{
+    "refresh_token": "YOUR_REFRESH_TOKEN_HERE"
+}
+
+### Logout
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/auth/logout
+Content-Type: application/json
+
+{
+    "refresh_token": "YOUR_REFRESH_TOKEN_HERE"
+}
 
 ### ========== PROJECT MANAGEMENT ==========
 
-### Create Project (First login to get token)
-POST https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/projects
+### Create Project (Teacher)
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/projects
 Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
 Content-Type: application/json
 
@@ -92,9 +143,9 @@ Content-Type: application/json
     "description": "Building a full-stack web application"
 }
 
-### Create Another Project
-POST https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/projects
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjb3Vyc2UiOiIzIiwiZW1haWwiOiJzdHVkZW50LnRlc3RAZXhhbXBsZS5jb20iLCJleHAiOjE3Njc5MjI3OTQsImZ1bGxuYW1lIjoi0KHRi9C9INCx0LvRj9C00LgiLCJyb2xlIjoic3R1ZGVudCIsInVzZXJfaWQiOiJjZWE2ZDE1YWI1MDI3NjRlYjA5ZDJjY2QiLCJ1c2VybmFtZSI6InRlc3Rfc3R1ZGVudCJ9.69YgnqAvEvaaHVWLAv6Q9K+0lwYS9czaa8yedPpc11Q=
+### Create Another Project (Student)
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/projects
+Authorization: Bearer YOUR_STUDENT_TOKEN_HERE
 Content-Type: application/json
 
 {
@@ -103,17 +154,48 @@ Content-Type: application/json
 }
 
 ### Get User's Projects
-GET https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/projects
-Authorization: Bearer YOUR_STUDENT_TOKEN_HERE
+GET https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/projects
+Authorization: Bearer YOUR_TOKEN_HERE
 
 ### Get Project by ID
-GET https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/projects/1
+GET https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/projects/1
+Authorization: Bearer YOUR_TOKEN_HERE
+
+### Update Project
+PUT https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/projects/1
+Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
+Content-Type: application/json
+
+{
+    "name": "Updated Project Name",
+    "description": "Updated project description"
+}
+
+### Delete Project
+DELETE https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/projects/1
+Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
+
+### Add Project Member
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/projects/1/members
+Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
+Content-Type: application/json
+
+{
+    "user_id": "1"
+}
+
+### Remove Project Member
+DELETE https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/projects/1/members/1
+Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
+
+### Get Project Statistics
+GET https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/projects/1/stats
 Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
 
 ### ========== TASK MANAGEMENT ==========
 
-### Create Task in Project (replace {project_id} with actual ID)
-POST https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/tasks
+### Create Task in Project
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/tasks
 Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
 Content-Type: application/json
 
@@ -126,7 +208,7 @@ Content-Type: application/json
 }
 
 ### Create Task with Assignee
-POST https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/tasks
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/tasks
 Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
 Content-Type: application/json
 
@@ -139,19 +221,29 @@ Content-Type: application/json
 }
 
 ### Get User's Tasks
-GET https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/tasks
+GET https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/tasks
 Authorization: Bearer YOUR_STUDENT_TOKEN_HERE
 
 ### Get Task by ID
-GET https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/tasks/1
-Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
+GET https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/tasks/1
+Authorization: Bearer YOUR_TOKEN_HERE
 
-### Get Project Tasks
-GET https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/projects/1/tasks
+### Update Task
+PUT https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/tasks/1
+Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
+Content-Type: application/json
+
+{
+    "title": "Updated Task Title",
+    "description": "Updated task description"
+}
+
+### Delete Task
+DELETE https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/tasks/1
 Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
 
 ### Update Task Status
-PUT https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/tasks/1/status
+PUT https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/tasks/1/status
 Authorization: Bearer YOUR_STUDENT_TOKEN_HERE
 Content-Type: application/json
 
@@ -160,7 +252,7 @@ Content-Type: application/json
 }
 
 ### Assign Task
-PUT https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/tasks/1/assign
+PUT https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/tasks/1/assign
 Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
 Content-Type: application/json
 
@@ -168,14 +260,30 @@ Content-Type: application/json
     "user_id": "1"
 }
 
-### Search Tasks
-GET https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/tasks/search?q=database&project_id=1
+### Get Project Tasks
+GET https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/projects/1/tasks
 Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
+
+### Search Tasks
+GET https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/tasks/search?q=database&project_id=1
+Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
+
+### Search Tasks with Tag
+GET https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/tasks/search?tag=database&project_id=1
+Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
+
+### Get Tasks with Filters
+GET https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/tasks?project_id=1&status=todo
+Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
+
+### Get Assigned Tasks
+GET https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/tasks?assigned=true
+Authorization: Bearer YOUR_STUDENT_TOKEN_HERE
 
 ### ========== COMMENT MANAGEMENT ==========
 
 ### Add Comment to Task
-POST https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/tasks/1/comments
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/tasks/1/comments
 Authorization: Bearer YOUR_STUDENT_TOKEN_HERE
 Content-Type: application/json
 
@@ -184,23 +292,35 @@ Content-Type: application/json
 }
 
 ### Get Task Comments
-GET https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/tasks/1/comments
-Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
+GET https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/tasks/1/comments
+Authorization: Bearer YOUR_TOKEN_HERE
+
+### Delete Comment
+DELETE https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/comments/1
+Authorization: Bearer YOUR_ADMIN_TOKEN_HERE
 
 ### ========== NOTIFICATION MANAGEMENT ==========
 
 ### Get User Notifications
-GET https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/notifications
+GET https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/notifications
+Authorization: Bearer YOUR_STUDENT_TOKEN_HERE
+
+### Get Unread Notifications Only
+GET https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/notifications?unread_only=true
+Authorization: Bearer YOUR_STUDENT_TOKEN_HERE
+
+### Mark Notification as Read
+PUT https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/notifications/1/read
 Authorization: Bearer YOUR_STUDENT_TOKEN_HERE
 
 ### Mark All Notifications as Read
-PUT https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/notifications/read-all
+PUT https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/notifications/read-all
 Authorization: Bearer YOUR_STUDENT_TOKEN_HERE
 
 ### ========== TAG MANAGEMENT ==========
 
 ### Add Tag to Task
-POST https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/tasks/1/tags
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/tasks/1/tags
 Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
 Content-Type: application/json
 
@@ -209,7 +329,7 @@ Content-Type: application/json
 }
 
 ### Add Another Tag
-POST https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/tasks/1/tags
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/tasks/1/tags
 Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
 Content-Type: application/json
 
@@ -218,30 +338,17 @@ Content-Type: application/json
 }
 
 ### Get Task Tags
-GET https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/tasks/1/tags
+GET https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/tasks/1/tags
 Authorization: Bearer YOUR_STUDENT_TOKEN_HERE
 
 ### Remove Tag from Task
-DELETE https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/tasks/1/tags/backend
+DELETE https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/tasks/1/tags/backend
 Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
 
-### ========== AUTHENTICATION ==========
-
-### GitHub Auth Init
-POST https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/auth/init
-Content-Type: application/json
-
-{}
-
-POST https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/auth/validate
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjb3Vyc2UiOiIzIiwiaW1haWwiOiJzdHVkZW50LnRlc3RAZXhhbXBsZS5jb20iLCJleHAiOjE3Njc5MjIyMjgsImZ1bGxuYW1lIjoiVGVzdCBTdHVkZW50Iiwicm9sZSI6InN0dWRlbnQiLCJnaXRodWJfaWQiOiJjZWE2ZDE1YWI1MDI3NjRlYjA5ZDJjY2QiLCJ1c2VybmFtZSI6InRlc3Rfc3R1ZGVudCJ9.HwuiJCswrMQqj8/UgAh1xKiI/tGL/C4ESyymmtdFHmI=
-Content-Type: application/json
-
-{}
 ### ========== TEST CASES & ERROR HANDLING ==========
 
 ### Test Invalid Login (Wrong Password)
-POST https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/users/login
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/users/login
 Content-Type: application/json
 
 {
@@ -250,11 +357,11 @@ Content-Type: application/json
 }
 
 ### Test Invalid Token
-GET https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/users/me
+GET https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/users/me
 Authorization: Bearer INVALID_TOKEN_123456
 
 ### Test Missing Required Fields
-POST https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/users/register
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/users/register
 Content-Type: application/json
 
 {
@@ -263,7 +370,7 @@ Content-Type: application/json
 }
 
 ### Test Invalid Email Format
-POST https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/users/register
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/users/register
 Content-Type: application/json
 
 {
@@ -276,73 +383,100 @@ Content-Type: application/json
 }
 
 ### Test CORS Preflight
-OPTIONS https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/health
+OPTIONS https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/health
 Origin: http://localhost:3000
 Access-Control-Request-Method: GET
 Access-Control-Request-Headers: Content-Type
 
 ### Test Non-existent Endpoint
-GET https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/nonexistent
+GET https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/nonexistent
 
 ### Test Unauthorized Project Access
-GET https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/projects/999
+GET https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/projects/999
 Authorization: Bearer YOUR_STUDENT_TOKEN_HERE
 
 ### Test Invalid JSON
-POST https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/users/login
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/users/login
 Content-Type: application/json
 
 {
     "username": "test",
     "password": "test"
 
-### ========== STATISTICS & QUERIES ==========
-
-### Get Project Statistics
-GET https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/projects/1/stats
-Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
-
-### Get Tasks with Filters
-GET https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/tasks?project_id=1&status=todo
-Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
-
-### Get Assigned Tasks
-GET https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/tasks?assigned=true
-Authorization: Bearer YOUR_STUDENT_TOKEN_HERE
-
-### ========== PROJECT MEMBER MANAGEMENT ==========
-
-### Add Project Member (replace project_id and user_id)
-POST https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/projects/1/members
-Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
+### Test Short Password
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/users/register
 Content-Type: application/json
 
 {
-    "user_id": "1"
+    "username": "short_pass_user",
+    "email": "short@example.com",
+    "password": "123",
+    "full_name": "Short Password User",
+    "course": "1",
+    "role": "student"
+}
+
+### Test Invalid Course Number
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/users/register
+Content-Type: application/json
+
+{
+    "username": "bad_course_user",
+    "email": "course@example.com",
+    "password": "password123",
+    "full_name": "Bad Course User",
+    "course": "7",
+    "role": "student"
+}
+
+### Test Duplicate Username
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/users/register
+Content-Type: application/json
+
+{
+    "username": "test_student",
+    "email": "different@example.com",
+    "password": "password123",
+    "full_name": "Duplicate User",
+    "course": "1",
+    "role": "student"
+}
+
+### Test Duplicate Email
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/users/register
+Content-Type: application/json
+
+{
+    "username": "different_user",
+    "email": "student.test@example.com",
+    "password": "password123",
+    "full_name": "Duplicate Email User",
+    "course": "1",
+    "role": "student"
 }
 
 ### ========== PERFORMANCE TESTS ==========
 
 ### Rapid Health Checks (for testing)
-GET https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/health
-GET https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/health
-GET https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/health
-GET https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/health
+GET https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/health
+GET https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/health
+GET https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/health
+GET https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/health
 
 ### ========== ADDITIONAL UTILITY ==========
 
 ### Test with Empty Body
-POST https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/auth/init
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/auth/init
 Content-Type: application/json
 
 {}
 
 ### Test with Query Parameters
-GET https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/tasks/search?q=test&status=todo&project_id=1
+GET https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/tasks/search?q=test&status=todo&project_id=1&assignee_id=1
 Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
 
-### Test Large Payload (if needed)
-POST https://b3275c21-56e9-41c9-91b2-863cbc23d1e4.tunnel4.com/api/tasks
+### Test Large Payload
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/tasks
 Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
 Content-Type: application/json
 
@@ -352,4 +486,61 @@ Content-Type: application/json
     "project_id": "1",
     "assignee_id": "1",
     "due_date": "2025-02-28"
+}
+
+### ========== BATCH OPERATIONS (for testing) ==========
+
+### Create Multiple Tasks (run after creating project)
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/tasks
+Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
+Content-Type: application/json
+
+{
+    "title": "Frontend Development",
+    "description": "Create React components for the user interface",
+    "project_id": "1",
+    "assignee_id": "1",
+    "due_date": "2025-01-25"
+}
+
+###
+
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/tasks
+Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
+Content-Type: application/json
+
+{
+    "title": "API Development",
+    "description": "Create REST API endpoints",
+    "project_id": "1",
+    "assignee_id": "",
+    "due_date": "2025-01-30"
+}
+
+###
+
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/tasks
+Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
+Content-Type: application/json
+
+{
+    "title": "Testing",
+    "description": "Write unit and integration tests",
+    "project_id": "1",
+    "assignee_id": "",
+    "due_date": "2025-02-05"
+}
+
+###
+
+POST https://3280a8be-440f-4174-bbac-ed4003e901ff.tunnel4.com/api/tasks
+Authorization: Bearer YOUR_TEACHER_TOKEN_HERE
+Content-Type: application/json
+
+{
+    "title": "Deployment",
+    "description": "Deploy application to production server",
+    "project_id": "1",
+    "assignee_id": "",
+    "due_date": "2025-02-10"
 }

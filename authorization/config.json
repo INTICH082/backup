@@ -1,13 +1,13 @@
 {
     "server": {
-        "port": 8081,
+        "port": 8083,
         "jwt_secret": "iplaygodotandclaimfun",
         "jwt_expiry_hours": 24
     },
     "github": {
         "client_id": "Ov23lisJdUcb1DmKhIfe",
         "client_secret": "897dbebdde0fcb173d22f45f53de423bb7bb44ac",
-        "redirect_uri": "http://localhost:8081/callback"
+        "redirect_uri": "http://localhost:8083/callback"
     },
     "database": {
         "file": "users_db.json"
